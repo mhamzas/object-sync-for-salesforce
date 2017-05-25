@@ -248,6 +248,7 @@ class Object_Sync_Sf_Salesforce {
 		// if this request should be cached, see if it already exists
 		// if it is already cached, load it. if not, load it and then cache it if it should be cached
 		// add parameters to the array so we can tell if it was cached or not
+		$options['cache'] = false; // todo: REMOVE THIS LINE ONCE THE ERRORS STOP
 		if ( true === $options['cache'] && 'write' !== $options['type'] ) {
 			$cached = $this->wordpress->cache_get( $url, $params );
 			// some api calls can send a reset option, in which case we should redo the request anyway
@@ -302,7 +303,7 @@ class Object_Sync_Sf_Salesforce {
 	}
 
 	/**
-	* Make the HTTP request. Wrapper around curl().
+	* Make the HTTP request.
 	*
 	* @param string $url
 	*   Path to make request from.
@@ -320,25 +321,44 @@ class Object_Sync_Sf_Salesforce {
 	*/
 	protected function http_request( $url, $data, $headers = array(), $method = 'GET', $options = array() ) {
 		// Build the request, including path and headers. Internal use.
-		$curl = curl_init();
-		curl_setopt( $curl, CURLOPT_URL, $url );
-		curl_setopt( $curl, CURLOPT_RETURNTRANSFER, true );
-		curl_setopt( $curl, CURLOPT_FOLLOWLOCATION, true );
-		if ( false !== $headers ) {
-			curl_setopt( $curl, CURLOPT_HTTPHEADER, $headers );
+		$args = array(
+			'method' => $method,
+			'timeout' => ini_get( 'max_execution_time' ),
+			'redirection' => 5,
+			'httpversion' => '1.1',
+			'reject_unsafe_urls' => false,
+			'blocking' => true,
+			'headers' => $headers,
+			'cookies' => array(),
+			'body' => $data,
+			'compress' => true,
+			'decompress' => true,
+			'sslverify' => false, // maybe on debug only
+			'stream' => false,
+			'filename' => null,
+			'limit_response_size' => null,
+		);
+
+		if ( 'GET' === 'method' ) {
+			$json_response = wp_remote_get( $url, $args );
+		} elseif ( 'POST' === 'method' ) {
+			$json_response = wp_remote_post( $url, $args );
 		} else {
-			curl_setopt( $curl, CURLOPT_HEADER, false );
+			$json_response = wp_remote_request( $url, $args );
 		}
 
-		if ( 'POST' === $method ) {
-			curl_setopt( $curl, CURLOPT_POST, true );
-			curl_setopt( $curl, CURLOPT_POSTFIELDS, $data );
-		} elseif ( 'PATCH' === $method || 'DELETE' === $method ) {
-			curl_setopt( $curl, CURLOPT_CUSTOMREQUEST, $method );
-			curl_setopt( $curl, CURLOPT_POSTFIELDS, $data );
-		}
-		$json_response = curl_exec( $curl ); // this is possibly gzipped json data
-		$code = curl_getinfo( $curl, CURLINFO_HTTP_CODE );
+		error_log('resp is ' . print_r($json_response, true));
+
+		$code = wp_remote_retrieve_response_code( $json_response );
+
+		/*if ( is_wp_error( $json_response ) ) {
+			$error_message = $json_response->get_error_message();
+			echo "Error: " . $error_message;
+		} else {
+			echo '<pre>';
+				echo print_r( $json_response, true );
+			echo '</pre>';
+		}*/
 
 		if ( ( 'PATCH' === $method || 'DELETE' === $method ) && '' === $json_response && 204 === $code ) {
 			// delete and patch requests return a 204 with an empty body upon success for whatever reason
@@ -346,7 +366,6 @@ class Object_Sync_Sf_Salesforce {
 				'success' => true,
 				'body' => '',
 			);
-			curl_close( $curl );
 			return array(
 				'json' => wp_json_encode( $data ),
 				'code' => $code,
@@ -354,16 +373,15 @@ class Object_Sync_Sf_Salesforce {
 			);
 		}
 
-		if ( ( ord( $json_response[0] ) == 0x1f ) && ( ord( $json_response[1] ) == 0x8b ) ) {
+		/*if ( ( ord( $json_response[0] ) == 0x1f ) && ( ord( $json_response[1] ) == 0x8b ) ) {
 			// skip header and ungzip the data
 			$json_response = gzinflate( substr( $json_response, 10 ) );
-		}
-		$data = json_decode( $json_response, true ); // decode it into an array
+		}*/
+		$data = json_decode( $json_response['body'], true ); // decode it into an array
 
 		// don't use the exception if the status is a success one, or if it just needs a refresh token (salesforce uses 401 for this)
 		if ( ! in_array( $code, $this->success_or_refresh_codes ) ) {
-			$curl_error = curl_error( $curl );
-			if ( '' !== $curl_error ) {
+			if ( is_wp_error( $json_response ) ) {
 				// create log entry for failed curl
 				$status = 'error';
 				$title = ucfirst( $status ) . ': ' . $code . ': on Salesforce curl request';
@@ -375,7 +393,7 @@ class Object_Sync_Sf_Salesforce {
 
 				$logging->setup(
 					__( $title, 'object-sync-for-salesforce' ),
-					$curl_error,
+					$json_response->get_error_message(),
 					0,
 					0,
 					$status
@@ -415,11 +433,8 @@ class Object_Sync_Sf_Salesforce {
 				);
 			}
 		}
-
-		curl_close( $curl );
-
 		return array(
-			'json' => $json_response,
+			'json' => $json_response['body'],
 			'code' => $code,
 			'data' => $data,
 		);
@@ -610,7 +625,7 @@ class Object_Sync_Sf_Salesforce {
 	*/
 	public function request_token( $code ) {
 		$data = array(
-			'code' => $code,
+			'code' => esc_attr( $code ),
 			'grant_type' => 'authorization_code',
 			'client_id' => $this->consumer_key,
 			'client_secret' => $this->consumer_secret,
@@ -620,7 +635,7 @@ class Object_Sync_Sf_Salesforce {
 		$url = $this->login_url . $this->token_path;
 		$headers = array(
 			// This is an undocumented requirement on SF's end.
-			//'Content-Type' => 'application/x-www-form-urlencoded',
+			'Content-Type' => 'application/x-www-form-urlencoded',
 			'Accept-Encoding' => 'Accept-Encoding: gzip, deflate',
 		);
 		$response = $this->http_request( $url, $data, $headers, 'POST' );
