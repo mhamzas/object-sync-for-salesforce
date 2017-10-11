@@ -16,13 +16,14 @@
             "type": "git"
         },
         {
-            "url": "https://github.com/A5hleyRich/wp-background-processing",
+            "url": "https://github.com/A5hleyRich/wp-queue",
             "type": "git"
         }
     ],
     "require": {
+        "php": ">=5.5.0",
         "pippinsplugins/wp-logging": "dev-master",
-        "A5hleyRich/wp-background-processing": "dev-master",
+        "A5hleyRich/wp-queue": "dev-master",
         "developerforce/force.com-toolkit-for-php": "^1.0@dev"
     },
     "require-dev": {

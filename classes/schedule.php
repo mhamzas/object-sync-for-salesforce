@@ -1,6 +1,6 @@
 <?php
 /**
- * Class file for the Object_Sync_Sf_Schedule class. Extend the WP_Background_Process class for the purposes of Object Sync for Salesforce.
+ * Class file for the Object_Sync_Sf_Schedule class. Extend the WP_Queue\Job class for the purposes of Object Sync for Salesforce.
  *
  * @file
  */
@@ -9,10 +9,12 @@ if ( ! class_exists( 'Object_Sync_Salesforce' ) ) {
 	die();
 }
 
+use WP_Queue\Job;
+
 /**
  * Schedule events in a queue in WordPress
  */
-class Object_Sync_Sf_Schedule extends WP_Background_Process {
+class Object_Sync_Sf_Schedule extends Job {
 
 	protected $wpdb;
 	protected $version;
@@ -187,6 +189,14 @@ class Object_Sync_Sf_Schedule extends WP_Background_Process {
 		}
 
 	}
+
+	/**
+	 * Handle job logic.
+	 */
+	public function handle() {
+		// process the queue job
+	}
+
 
 	/**
 	 * Task

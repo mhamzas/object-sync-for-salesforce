@@ -33,6 +33,7 @@ class Object_Sync_Sf_Activate {
 		register_activation_hook( dirname( __DIR__ ) . '/' . $slug . '.php', array( $this, 'php_requirements' ) );
 		register_activation_hook( dirname( __DIR__ ) . '/' . $slug . '.php', array( $this, 'wordpress_salesforce_tables' ) );
 		register_activation_hook( dirname( __DIR__ ) . '/' . $slug . '.php', array( $this, 'add_roles_capabilities' ) );
+		register_activation_hook( dirname( __DIR__ ) . '/' . $slug . '.php', array( $this, 'wp_queue_setup' ) );
 		add_action( 'plugins_loaded', array( $this, 'wordpress_salesforce_update_db_check' ) );
 	}
 
@@ -144,6 +145,15 @@ class Object_Sync_Sf_Activate {
 			}
 		}
 
+	}
+
+	/**
+	* Setup for WP_Queue library
+	* This adds the necessary database tables for the library
+	*
+	*/
+	public function wp_queue_setup() {
+		wp_queue_install_tables();
 	}
 
 }

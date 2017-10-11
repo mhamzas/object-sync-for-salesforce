@@ -33,6 +33,7 @@ class Object_Sync_Sf_Deactivate {
 		register_deactivation_hook( dirname( __DIR__ ) . '/' . $slug . '.php', array( $this, 'clear_schedule' ) );
 		register_deactivation_hook( dirname( __DIR__ ) . '/' . $slug . '.php', array( $this, 'delete_log_post_type' ) );
 		register_deactivation_hook( dirname( __DIR__ ) . '/' . $slug . '.php', array( $this, 'remove_roles_capabilities' ) );
+		register_deactivation_hook( dirname( __DIR__ ) . '/' . $slug . '.php', array( $this, 'wp_queue_drop_tables' ) );
 	}
 
 	/**
@@ -91,6 +92,18 @@ class Object_Sync_Sf_Deactivate {
 			}
 		}
 
+	}
+
+	/**
+	* Drop WP_Queue database tables
+	* This removes the tables for the wp_queue library
+	*
+	*/
+	public function wp_queue_drop_tables() {
+		$queue_jobs_table = $this->wpdb->prefix . 'queue_jobs';
+		$queue_failures_table = $this->wpdb->prefix . 'queue_failures';
+		$this->wpdb->query( 'DROP TABLE IF EXISTS ' . $queue_jobs_table );
+		$this->wpdb->query( 'DROP TABLE IF EXISTS ' . $queue_failures_table );
 	}
 
 }
