@@ -16,13 +16,21 @@ Our extension to this class does a few things:
 
 Use the Log Settings tab to enable logs, and also to configure what gets logged by the plugin.
 
-![WordPress Log Settings screen](./assets/img/screenshots/03-wordpress-log-settings.png)
+![WordPress Log Settings screen](./assets/img/screenshots/06-wordpress-log-settings.png)
 
-If you choose to enable logging, you'll see a Logs custom content type added to WordPress. There, you'll be able to see the log entries created based on your settings. If you do enable this, you'll need to also indicate, at minimum:
+If you choose to enable logging, you'll see a Logs custom content type added to WordPress. There, you'll be able to see the log entries created based on your settings.
+
+### The Log Content Type
+
+![WordPress Log Content Type](./assets/img/screenshots/08-wordpress-log-content-type.png)
+
+### Back in the Log Settings screen
+
+If you do enable logging, you'll need to also indicate, at minimum:
 
 1. What statuses to log
 2. What triggers to log
 
-We recommend that you allow WordPress to automatically delete old log entries. If you want to do that, you'll have to enable that option, and also fill out hte settings for how often the plugin should delete and how often it should check.
+We recommend that you allow WordPress to automatically delete old log entries. If you want to do that, you'll have to enable that option, and also fill out the settings for how often the plugin should delete and how often it should check.
 
 These settings together mean that the plugin will check at intervals, and when it finds log entries that meet its criteria, it will delete them.

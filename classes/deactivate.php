@@ -1,5 +1,7 @@
 <?php
 /**
+ * Class file for the Object_Sync_Sf_Deactivate class.
+ *
  * @file
  */
 
@@ -31,6 +33,7 @@ class Object_Sync_Sf_Deactivate {
 		register_deactivation_hook( dirname( __DIR__ ) . '/' . $slug . '.php', array( $this, 'clear_schedule' ) );
 		register_deactivation_hook( dirname( __DIR__ ) . '/' . $slug . '.php', array( $this, 'delete_log_post_type' ) );
 		register_deactivation_hook( dirname( __DIR__ ) . '/' . $slug . '.php', array( $this, 'remove_roles_capabilities' ) );
+		register_deactivation_hook( dirname( __DIR__ ) . '/' . $slug . '.php', array( $this, 'flush_plugin_cache' ) );
 	}
 
 	/**
@@ -89,6 +92,15 @@ class Object_Sync_Sf_Deactivate {
 			}
 		}
 
+	}
+
+	/**
+	* Flush the plugin cache
+	*
+	*/
+	public function flush_plugin_cache() {
+		$sfwp_transients = new Object_Sync_Sf_WordPress_Transient( 'sfwp_transients' );
+		$sfwp_transients->flush();
 	}
 
 }

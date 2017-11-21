@@ -1,5 +1,7 @@
 <?php
 /**
+ * Class file for the Object_Sync_Sf_Salesforce_Pull class.
+ *
  * @file
  */
 
@@ -55,7 +57,7 @@ class Object_Sync_Sf_Salesforce_Pull {
 		$this->schedule = $this->schedule();
 
 		// load the schedule class
-		// the schedule needs to just run all the time at its configured intervals because wordpress will never trigger it on its own, ie by creating an object
+		// the schedule needs to just run all the time at its configured intervals because WordPress will never trigger it on its own, ie by creating an object
 		$schedule = $this->schedule;
 		// create new schedule based on the options for this current class
 		// this will use the existing schedule if it already exists; otherwise it'll create one
@@ -91,7 +93,7 @@ class Object_Sync_Sf_Salesforce_Pull {
 			$code = '403';
 		}
 
-		if ( ! empty( $_POST ) ) {
+		if ( ! empty( $_POST ) ) { // linter flags this, but we're not doing anything with the array just checking to see if it is empty
 			wp_send_json_success( $code );
 		} else {
 			return $code;
@@ -165,6 +167,7 @@ class Object_Sync_Sf_Salesforce_Pull {
 	private function get_updated_records() {
 		$sfapi = $this->salesforce['sfapi'];
 		foreach ( $this->mappings->get_fieldmaps() as $salesforce_mapping ) {
+			$map_sync_triggers = $salesforce_mapping['sync_triggers']; // this sets which SalesForce triggers are allowed for the mapping
 			$type = $salesforce_mapping['salesforce_object']; // this sets the salesfore object type for the SOQL query
 
 			$soql = $this->get_pull_query( $type, $salesforce_mapping );
@@ -196,21 +199,47 @@ class Object_Sync_Sf_Salesforce_Pull {
 
 					// if this record is new as of the last sync, use the create trigger
 					if ( isset( $result['CreatedDate'] ) && $result['CreatedDate'] > $last_sync ) {
-						$trigger = $this->mappings->sync_sf_create;
+						$sf_sync_trigger = $this->mappings->sync_sf_create;
 					} else {
-						$trigger = $this->mappings->sync_sf_update;
+						$sf_sync_trigger = $this->mappings->sync_sf_update;
 					}
 
-					$data = array(
-						'object_type' => $type,
-						'object' => $result,
-						'mapping' => $salesforce_mapping,
-						'sf_sync_trigger' => $trigger, // use the appropriate trigger based on when this was created
-					);
+					// Only queue when the record's trigger is configured for the mapping
+					// these are bit operators, so we leave out the strict
+					if ( isset( $map_sync_triggers ) && isset( $sf_sync_trigger ) && in_array( $sf_sync_trigger, $map_sync_triggers ) ) { // wp or sf crud event
+						$data = array(
+							'object_type' => $type,
+							'object' => $result,
+							'mapping' => $salesforce_mapping,
+							'sf_sync_trigger' => $sf_sync_trigger, // use the appropriate trigger based on when this was created
+						);
 
-					$this->schedule->push_to_queue( $data );
-					$this->schedule->save()->dispatch();
+						// Hook to allow other plugins to prevent a pull per-mapping.
+						// Putting the pull_allowed hook here will keep the queue from storing data when it is not supposed to store it
+						$pull_allowed = apply_filters( 'object_sync_for_salesforce_pull_object_allowed', true, $type, $result, $sf_sync_trigger, $salesforce_mapping );
 
+						// example to keep from pulling the Contact with id of abcdef
+						/*
+						add_filter( 'object_sync_for_salesforce_pull_object_allowed', 'check_user', 10, 5 );
+						// can always reduce this number if all the arguments are not necessary
+						function check_user( $pull_allowed, $object_type, $object, $sf_sync_trigger, $salesforce_mapping ) {
+							if ( $object_type === 'Contact' && $object['Id'] === 'abcdef' ) {
+								return false;
+							}
+						}
+						*/
+
+						if ( false === $pull_allowed ) {
+							continue;
+						}
+
+						// Initialize the queue with the data for this record and save
+						$this->schedule->data( array( $data ) );
+						$this->schedule->save()->dispatch();
+						// Update the last pull sync timestamp for this record type to avoid re-processing in case of error
+						$last_sync_pull_trigger = DateTime::createFromFormat( 'Y-m-d\TH:i:s+', $result[ $salesforce_mapping['pull_trigger_field'] ], new DateTimeZone( 'UTC' ) );
+						update_option( 'object_sync_for_salesforce_pull_last_sync_' . $type, $last_sync_pull_trigger->format( 'U' ) );
+					}
 				}
 
 				// Handle requests larger than the batch limit (usually 2000).
@@ -230,15 +259,30 @@ class Object_Sync_Sf_Salesforce_Pull {
 					if ( ! isset( $new_response['errorCode'] ) ) {
 						// Write items to the queue.
 						foreach ( $new_response['records'] as $result ) {
-							$data = array(
-								'object_type' => $type,
-								'object' => $result,
-								'mapping' => $mapping,
-								'sf_sync_trigger' => $this->mappings->sync_sf_update, // sf update trigger
-							);
-							$this->schedule->push_to_queue( $data );
-							$this->schedule->save();
+							// if this record is new as of the last sync, use the create trigger
+							if ( isset( $result['CreatedDate'] ) && $result['CreatedDate'] > $last_sync ) {
+								$sf_sync_trigger = $this->mappings->sync_sf_create;
+							} else {
+								$sf_sync_trigger = $this->mappings->sync_sf_update;
+							}
 
+							// Only queue when the record's trigger is configured for the mapping
+							// these are bit operators, so we leave out the strict
+							if ( isset( $map_sync_triggers ) && isset( $sf_sync_trigger ) && in_array( $sf_sync_trigger, $map_sync_triggers ) ) { // wp or sf crud event
+								$data = array(
+									'object_type' => $type,
+									'object' => $result,
+									'mapping' => $salesforce_mapping,
+									'sf_sync_trigger' => $sf_sync_trigger, // use the appropriate trigger based on when this was created
+								);
+
+								// Initialize the queue with the data for this record and save
+								$this->schedule->data( array( $data ) );
+								$this->schedule->save()->dispatch();
+								// Update the last pull sync timestamp for this record type to avoid re-processing in case of error
+								$last_sync_pull_trigger = DateTime::createFromFormat( 'Y-m-d\TH:i:s+', $result[ $salesforce_mapping['pull_trigger_field'] ], new DateTimeZone( 'UTC' ) );
+								update_option( 'object_sync_for_salesforce_pull_last_sync_' . $type, $last_sync_pull_trigger->format( 'U' ) );
+							}
 						}
 					}
 
@@ -251,7 +295,12 @@ class Object_Sync_Sf_Salesforce_Pull {
 
 				// create log entry for failed pull
 				$status = 'error';
-				$title = ucfirst( $status ) . ': ' . $response['errorCode'] . ' ' . $salesforce_mapping['salesforce_object'];
+				// translators: placeholders are: 1) the server error code, and 2) the name of the Salesforce object
+				$title = sprintf( esc_html__( 'Error: %1$s %2$s', 'object-sync-for-salesforce' ),
+					absint( $response['errorCode'] ),
+					esc_attr( $salesforce_mapping['salesforce_object'] )
+				);
+
 				if ( isset( $this->logging ) ) {
 					$logging = $this->logging;
 				} elseif ( class_exists( 'Object_Sync_Sf_Logging' ) ) {
@@ -259,7 +308,7 @@ class Object_Sync_Sf_Salesforce_Pull {
 				}
 
 				$logging->setup(
-					__( $title, 'object-sync-for-salesforce' ),
+					$title,
 					$response['message'],
 					$sf_mapping['sync_triggers'],
 					'',
@@ -288,16 +337,16 @@ class Object_Sync_Sf_Salesforce_Pull {
 		$mapped_record_types = array();
 
 		$mappings = $this->mappings->get_fieldmaps(
-		    null,
-		    array(
-		        'salesforce_object' => $type,
-		    )
+			null,
+			array(
+				'salesforce_object' => $type,
+			)
 		);
 
 		// Iterate over each field mapping to determine our query parameters.
 		foreach ( $mappings as $mapping ) {
 
-			// only use fields that come from salesforce to wordpress, or that sync
+			// only use fields that come from Salesforce to WordPress, or that sync
 			$mapped_fields = array_merge(
 				$mapped_fields,
 				$this->mappings->get_mapped_fields(
@@ -311,11 +360,11 @@ class Object_Sync_Sf_Salesforce_Pull {
 
 			// If Record Type is not specified for a given mapping, ensure query is unrestricted.
 			if ( empty( $mapping_record_types ) ) {
-	  			$mapped_record_types = false;
+				$mapped_record_types = false;
 			} elseif ( is_array( $mapped_record_types ) ) {
-	  			$mapped_record_types = array_merge( $mapped_record_types, $mapping_record_types );
-	  		}
-	  	} // End foreach().
+				$mapped_record_types = array_merge( $mapped_record_types, $mapping_record_types );
+			}
+		} // End foreach().
 
 		// There are no field mappings configured to pull data from Salesforce so
 		// move on to the next mapped object. Prevents querying unmapped data.
@@ -334,6 +383,7 @@ class Object_Sync_Sf_Salesforce_Pull {
 			)
 		);
 
+		// these are bit operators, so we leave out the strict
 		if ( in_array( $this->mappings->sync_sf_create, $salesforce_mapping['sync_triggers'] ) ) {
 			$soql->fields['CreatedDate'] = 'CreatedDate';
 		}
@@ -352,6 +402,11 @@ class Object_Sync_Sf_Salesforce_Pull {
 			$soql->add_condition( $salesforce_mapping['pull_trigger_field'], $activated, '>' );
 			// put a hook in here to let devs go retroactive if they want, and sync data from before plugin was activated
 		}
+
+		// Order by the trigger field, requesting the oldest records first
+		$soql->order = array(
+			$salesforce_mapping['pull_trigger_field'] => 'ASC',
+		);
 
 		return $soql;
 
@@ -375,10 +430,10 @@ class Object_Sync_Sf_Salesforce_Pull {
 			$type = $salesforce_mapping['salesforce_object'];
 
 			$mappings = $this->mappings->get_fieldmaps(
-			    null,
-			    array(
-			        'salesforce_object' => $type,
-			    )
+				null,
+				array(
+					'salesforce_object' => $type,
+				)
 			);
 
 			// Iterate over each field mapping to determine our query parameters.
@@ -386,6 +441,7 @@ class Object_Sync_Sf_Salesforce_Pull {
 
 				$last_delete_sync = get_option( 'object_sync_for_salesforce_pull_delete_last_' . $type, current_time( 'timestamp', true ) );
 				$now = current_time( 'timestamp', true );
+				update_option( 'object_sync_for_salesforce_pull_delete_last_' . $type, $now );
 
 				// get_deleted() constraint: startDate cannot be more than 30 days ago
 				// (using an incompatible date may lead to exceptions).
@@ -408,6 +464,8 @@ class Object_Sync_Sf_Salesforce_Pull {
 
 				foreach ( $deleted['data']['deletedRecords'] as $result ) {
 
+					$sf_sync_trigger = $this->mappings->sync_sf_delete;
+
 					// salesforce seriously returns Id for update requests and id for delete requests and this makes no sense but maybe one day they might change it somehow?
 					if ( ! isset( $result['Id'] ) && isset( $result['id'] ) ) {
 						$result['Id'] = $result['id'];
@@ -416,8 +474,28 @@ class Object_Sync_Sf_Salesforce_Pull {
 						'object_type' => $type,
 						'object' => $result,
 						'mapping' => $mapping,
-						'sf_sync_trigger' => $this->mappings->sync_sf_delete, // sf delete trigger
+						'sf_sync_trigger' => $sf_sync_trigger, // sf delete trigger
 					);
+
+					// Hook to allow other plugins to prevent a pull per-mapping.
+					// Putting the pull_allowed hook here will keep the queue from storing data when it is not supposed to store it
+					$pull_allowed = apply_filters( 'object_sync_for_salesforce_pull_object_allowed', true, $type, $result, $sf_sync_trigger, $salesforce_mapping );
+
+					// example to keep from pulling the Contact with id of abcdef
+					/*
+					add_filter( 'object_sync_for_salesforce_pull_object_allowed', 'check_user', 10, 5 );
+					// can always reduce this number if all the arguments are not necessary
+					function check_user( $pull_allowed, $object_type, $object, $sf_sync_trigger, $salesforce_mapping ) {
+						if ( $object_type === 'Contact' && $object['Id'] === 'abcdef' ) {
+							return false;
+						}
+					}
+					*/
+
+					if ( false === $pull_allowed ) {
+						continue;
+					}
+
 					$this->schedule->push_to_queue( $data );
 					$this->schedule->save()->dispatch();
 
@@ -487,42 +565,27 @@ class Object_Sync_Sf_Salesforce_Pull {
 
 		foreach ( $salesforce_mappings as $salesforce_mapping ) {
 
-			// this returns the row that maps the individual salesforce row to the individual wordpress row
+			// this returns the row that maps the individual Salesforce row to the individual WordPress row
 			if ( isset( $object['Id'] ) ) {
 				$mapping_object = $this->mappings->load_by_salesforce( $object['Id'] );
 			} else {
-				// if we don't have a salesforce object id, we've got no business doing stuff in wordpress
+				// if we don't have a Salesforce object id, we've got no business doing stuff in WordPress
 				$status = 'error';
 				if ( isset( $this->logging ) ) {
 					$logging = $this->logging;
 				} elseif ( class_exists( 'Object_Sync_Sf_Logging' ) ) {
 					$logging = new Object_Sync_Sf_Logging( $this->wpdb, $this->version );
 				}
+
+				$title = sprintf( esc_html__( 'Error: Salesforce Pull: unable to process queue item because it has no Salesforce Id.', 'object-sync-for-salesforce' ) );
+
 				$logging->setup(
-					__( ucfirst( $status ) . ': Salesforce Pull: unable to process queue item because it has no Salesforce Id.', 'object-sync-for-salesforce' ),
-					print_r( $object, true ),
+					$title,
+					print_r( $object, true ), // log whatever we have in the event of this error, so print the array
 					$sf_sync_trigger,
 					$status
 				);
 				return;
-			}
-
-			// hook to allow other plugins to prevent a pull per-mapping.
-			$pull_allowed = apply_filters( 'object_sync_for_salesforce_pull_object_allowed', true, $object_type, $object, $sf_sync_trigger, $salesforce_mapping );
-
-			// example to keep from pulling the Contact with id of abcdef
-			/*
-			add_filter( 'object_sync_for_salesforce_pull_object_allowed', 'check_user', 10, 5 );
-			// can always reduce this number if all the arguments are not necessary
-			function check_user( $pull_allowed, $object_type, $object, $sf_sync_trigger, $salesforce_mapping ) {
-				if ( $object_type === 'Contact' && $object['Id'] === 'abcdef' ) {
-					return false;
-				}
-			}
-			*/
-
-			if ( false === $pull_allowed ) {
-				continue;
 			}
 
 			// if there's already a connection between the objects, $mapping_object will be an array
@@ -531,7 +594,7 @@ class Object_Sync_Sf_Salesforce_Pull {
 			// hook to allow other plugins to define or alter the mapping object
 			$mapping_object = apply_filters( 'object_sync_for_salesforce_pull_mapping_object', $mapping_object, $object, $mapping );
 
-			// we already have the data from salesforce at this point; we just need to work with it in wordpress
+			// we already have the data from Salesforce at this point; we just need to work with it in WordPress
 			$synced_object = array(
 				'salesforce_object' => $object,
 				'mapping_object' => $mapping_object,
@@ -543,18 +606,18 @@ class Object_Sync_Sf_Salesforce_Pull {
 
 			$op = '';
 
-			// are these objects already connected in wordpress?
+			// are these objects already connected in WordPress?
 			if ( isset( $mapping_object['id'] ) ) {
 				$is_new = false;
 				$mapping_object_id_transient = $mapping_object['id'];
 			} else {
-				// there is not a mapping object for this wordpress object id yet
+				// there is not a mapping object for this WordPress object id yet
 				// check for that transient with the currently pushing id
 				$is_new = true;
 				$mapping_object_id_transient = get_transient( 'salesforce_pushing_object_id' );
 			}
 
-			// drupal only does a salesforce_pull flag, but we might as well do push and pull because wordpress
+			// Drupal only does a salesforce_pull flag, but we might as well do push and pull because WordPress
 			$salesforce_pushing = (int) get_transient( 'salesforce_pushing_' . $mapping_object_id_transient );
 			if ( 1 === $salesforce_pushing ) {
 				$transients_to_delete[] = $mapping_object_id_transient;
@@ -562,7 +625,7 @@ class Object_Sync_Sf_Salesforce_Pull {
 			}
 
 			// deleting mapped objects
-			if ( $sf_sync_trigger == $this->mappings->sync_sf_delete ) {
+			if ( $sf_sync_trigger == $this->mappings->sync_sf_delete ) { // trigger is a bit operator
 				if ( isset( $mapping_object['id'] ) ) {
 
 					set_transient( 'salesforce_pulling_' . $mapping_object['id'], 1, $seconds );
@@ -582,8 +645,18 @@ class Object_Sync_Sf_Salesforce_Pull {
 								$logging = new Object_Sync_Sf_Logging( $this->wpdb, $this->version );
 							}
 
+							// translators: placeholders are: 1) what operation is happening, 2) the name of the WordPress object type, 3) the WordPress id field name, 4) the WordPress object id value, 5) the name of the Salesforce object, 6) the Salesforce Id value
+							$title = sprintf( esc_html__( 'Error: %1$s WordPress %2$s with %3$s of %4$s (%5$s %6$s)', 'object-sync-for-salesforce' ),
+								esc_attr( $op ),
+								esc_attr( $salesforce_mapping['wordpress_object'] ),
+								esc_attr( $object_id ),
+								esc_attr( $mapping_object['wordpress_id'] ),
+								esc_attr( $salesforce_mapping['salesforce_object'] ),
+								esc_attr( $mapping_object['salesforce_id'] )
+							);
+
 							$logging->setup(
-								__( ucfirst( $status ) . ': ' . $op . ' WordPress ' . $salesforce_mapping['wordpress_object'] . ' with ' . $object_id . ' of ' . $mapping_object['wordpress_id'] . ' (' . $salesforce_mapping['salesforce_object'] . ' ' . $mapping_object['salesforce_id'] . ')', 'object-sync-for-salesforce' ),
+								$title,
 								$e->getMessage(),
 								$sf_sync_trigger,
 								$mapping_object['wordpress_id'],
@@ -603,7 +676,7 @@ class Object_Sync_Sf_Salesforce_Pull {
 							// hook for pull fail
 							do_action( 'object_sync_for_salesforce_pull_fail', $op, $result, $synced_object );
 
-						}
+						} // End try().
 
 						if ( ! isset( $e ) ) {
 							// create log entry for successful delete if the result had no errors
@@ -614,8 +687,18 @@ class Object_Sync_Sf_Salesforce_Pull {
 								$logging = new Object_Sync_Sf_Logging( $this->wpdb, $this->version );
 							}
 
+							// translators: placeholders are: 1) what operation is happening, 2) the name of the WordPress object type, 3) the WordPress id field name, 4) the WordPress object id value, 5) the name of the Salesforce object, 6) the Salesforce Id value
+							$title = sprintf( esc_html__( 'Success: %1$s WordPress %2$s with %3$s of %4$s (%5$s %6$s)', 'object-sync-for-salesforce' ),
+								esc_attr( $op ),
+								esc_attr( $salesforce_mapping['wordpress_object'] ),
+								esc_attr( $object_id ),
+								esc_attr( $mapping_object['wordpress_id'] ),
+								esc_attr( $salesforce_mapping['salesforce_object'] ),
+								esc_attr( $mapping_object['salesforce_id'] )
+							);
+
 							$logging->setup(
-								__( ucfirst( $status ) . ': ' . $op . ' WordPress ' . $salesforce_mapping['wordpress_object'] . ' with ' . $object_id . ' of ' . $mapping_object['wordpress_id'] . ' (' . $salesforce_mapping['salesforce_object'] . ' ' . $mapping_object['salesforce_id'] . ')', 'object-sync-for-salesforce' ),
+								$title,
 								'',
 								$sf_sync_trigger,
 								$mapping_object['wordpress_id'],
@@ -626,19 +709,19 @@ class Object_Sync_Sf_Salesforce_Pull {
 							do_action( 'object_sync_for_salesforce_pull_success', $op, $result, $synced_object );
 						}
 					} else {
-						$more_ids = '<p>The WordPress record was not deleted because there are multiple Salesforce IDs that match this WordPress ID. They are: ';
+						$more_ids = sprintf( '<p>' . esc_html__( 'The WordPress record was not deleted because there are multiple Salesforce IDs that match this WordPress ID. They are:', 'object-sync-for-salesforce' ) );
 						$i = 0;
 						foreach ( $wordpress_check as $match ) {
 							$i++;
-							$more_ids .= $match['salesforce_id'];
+							$more_ids .= sprintf( $match['salesforce_id'] );
 							if ( count( $wordpress_check ) !== $i ) {
-								$more_ids .= ', ';
+								$more_ids .= sprintf( ', ' );
 							} else {
-								$more_ids .= '.</p>';
+								$more_ids .= sprintf( '.</p>' );
 							}
 						}
 
-						$more_ids .= '<p>The map row between this Salesforce object and the WordPress object, as stored in the WordPress database, will be deleted, and this Salesforce object has been deleted, but the WordPress object row will remain untouched.</p>';
+						$more_ids .= sprintf( '<p>' . esc_html__( 'The map row between this Salesforce object and the WordPress object, as stored in the WordPress database, will be deleted, and this Salesforce object has been deleted, but the WordPress object row will remain untouched.', 'object-sync-for-salesforce' ) . '</p>' );
 
 						$status = 'notice';
 						if ( isset( $this->logging ) ) {
@@ -647,8 +730,18 @@ class Object_Sync_Sf_Salesforce_Pull {
 							$logging = new Object_Sync_Sf_Logging( $this->wpdb, $this->version );
 						}
 
+						// translators: placeholders are: 1) what operation is happening, 2) the name of the WordPress object type, 3) the WordPress id field name, 4) the WordPress object id value, 5) the name of the Salesforce object, 6) the Salesforce Id value
+						$title = sprintf( esc_html__( 'Notice: %1$s %2$s with %3$s of %4$s (%5$s %6$s) did not delete the WordPress item.', 'object-sync-for-salesforce' ),
+							esc_attr( $op ),
+							esc_attr( $salesforce_mapping['wordpress_object'] ),
+							esc_attr( $object_id ),
+							esc_attr( $mapping_object['wordpress_id'] ),
+							esc_attr( $salesforce_mapping['salesforce_object'] ),
+							esc_attr( $mapping_object['salesforce_id'] )
+						);
+
 						$logging->setup(
-							__( ucfirst( $status ) . ': ' . $op . ' ' . $salesforce_mapping['wordpress_object'] . ' with ' . $object_id . ' of ' . $mapping_object['wordpress_id'] . ' (' . $salesforce_mapping['salesforce_object'] . ' ' . $mapping_object['salesforce_id'] . ') did not delete the WordPress item...', 'object-sync-for-salesforce' ),
+							$title,
 							$more_ids,
 							$sf_sync_trigger,
 							$mapping_object['wordpress_id'],
@@ -656,29 +749,28 @@ class Object_Sync_Sf_Salesforce_Pull {
 						);
 					} // End if().
 
-					// delete the map row from wordpress after the wordpress row has been deleted
-					// we delete the map row even if the wordpress delete failed, because the salesforce object is gone
+					// delete the map row from WordPress after the WordPress row has been deleted
+					// we delete the map row even if the WordPress delete failed, because the Salesforce object is gone
 					$this->mappings->delete_object_map( $mapping_object['id'] );
-
-				} // End if(). there is no map row
-
-			  	return;
+					// there is no map row if we end this if statement
+				} // End if().
+				return;
 			} // End if().
 
-			// map the salesforce values to wordpress fields
+			// map the Salesforce values to WordPress fields
 			$params = $this->mappings->map_params( $mapping, $object, $sf_sync_trigger, false, $is_new );
 
 			// hook to allow other plugins to modify the $params array
-			// use hook to map fields between the wordpress and salesforce objects
+			// use hook to map fields between the WordPress and Salesforce objects
 			// returns $params.
 			$params = apply_filters( 'object_sync_for_salesforce_pull_params_modify', $params, $mapping, $object, $sf_sync_trigger, false, $is_new );
 
-			// if we don't get any params, there are no fields that should be sent to wordpress
+			// if we don't get any params, there are no fields that should be sent to WordPress
 			if ( empty( $params ) ) {
 				return;
 			}
 
-			// if there is a prematch wordpress field - ie email - on the fieldmap object
+			// if there is a prematch WordPress field - ie email - on the fieldmap object
 			if ( isset( $params['prematch'] ) && is_array( $params['prematch'] ) ) {
 				$prematch_field_wordpress = $params['prematch']['wordpress_field'];
 				$prematch_field_salesforce = $params['prematch']['salesforce_field'];
@@ -708,7 +800,7 @@ class Object_Sync_Sf_Salesforce_Pull {
 
 			// methods to run the wp create or update operations
 
-			if ( true === $is_new && ( $sf_sync_trigger == $this->mappings->sync_sf_create ) ) {
+			if ( true === $is_new ) {
 
 				// setup SF record type. CampaignMember objects get their Campaign's type
 				// i am still a bit confused about this
@@ -722,7 +814,7 @@ class Object_Sync_Sf_Salesforce_Pull {
 					$params['RecordTypeId'] = array(
 						'value' => $salesforce_mapping['salesforce_record_type_default'],
 						'method_modify' => 'update_' . $type . '_meta',
-	            		'method_read' => 'get_' . $type . '_meta',
+						'method_read' => 'get_' . $type . '_meta',
 					);
 				}
 
@@ -733,10 +825,10 @@ class Object_Sync_Sf_Salesforce_Pull {
 					// ex: match a WordPress user based on some other criteria than the predefined ones
 					// returns a $salesforce_id.
 					// it should keep NULL if there is no match
-					// the function that calls this hook needs to check the mapping to make sure the wordpress object is the right type
+					// the function that calls this hook needs to check the mapping to make sure the WordPress object is the right type
 					$wordpress_id = apply_filters( 'object_sync_for_salesforce_find_wp_object_match', null, $object, $mapping, 'pull' );
 
-					// hook to allow other plugins to do something right before wordpress data is saved
+					// hook to allow other plugins to do something right before WordPress data is saved
 					// ex: run outside methods on an object if it exists, or do something in preparation for it if it doesn't
 					do_action( 'object_sync_for_salesforce_pre_pull', $wordpress_id, $mapping, $object, $object_id, $params );
 
@@ -768,8 +860,8 @@ class Object_Sync_Sf_Salesforce_Pull {
 							$wordpress_id = $this->wordpress->object_upsert( $salesforce_mapping['wordpress_object'], $upsert_key, $upsert_value, $upsert_methods, $params, $salesforce_mapping['push_drafts'], true );
 						}
 
-						// find out if there is a mapping object for this wordpress object already
-						// don't do it if the wordpress id is 0.
+						// find out if there is a mapping object for this WordPress object already
+						// don't do it if the WordPress id is 0.
 						if ( 0 !== $wordpress_id ) {
 							$mapping_object = $this->mappings->get_object_maps(
 								array(
@@ -788,16 +880,26 @@ class Object_Sync_Sf_Salesforce_Pull {
 							if ( array() !== $mapping_object_debug ) {
 								// create log entry to warn about at least one id of 0
 								$status = 'error';
-								$title = ucfirst( $status ) . ': There is at least one object map with a WordPress ID of 0.';
+								$title = sprintf( esc_html__( 'Error: There is at least one object map with a WordPress ID of 0.', 'object-sync-for-salesforce' ) );
 
 								if ( 1 === count( $mapping_object_debug ) ) {
-									$body = 'There is an object map with ID of ' . $mapping_object_debug['id'] . ' , and it is mapped to the WordPress ' . $salesforce_mapping['wordpress_object'] . ' with ID of 0 and the Salesforce object with ID of ' . $mapping_object_debug['salesforce_id'];
+									// translators: placeholders are: 1) the mapping object row ID, 2) the name of the WordPress object, 3) the ID of the Salesforce object it was trying to map
+									$body = sprintf( esc_html__( 'There is an object map with ID of %1$s and it is mapped to the WordPress %2$s with ID of 0 and the Salesforce object with ID of %3$s', 'object-sync-for-salesforce' ),
+										absint( $mapping_object_debug['id'] ),
+										esc_attr( $salesforce_mapping['wordpress_object'] ),
+										esc_attr( $mapping_object_debug['salesforce_id'] )
+									);
 								} else {
-									$body = 'There are multiple object maps with WordPress ID of 0. Their IDs are: <ul>';
+									$body = sprintf( esc_html__( 'There are multiple object maps with WordPress ID of 0. Their IDs are: ', 'object-sync-for-salesforce' ) . '<ul>' );
 									foreach ( $mapping_object_debug as $mapping_object ) {
-										$body .= '<li>Mapping object id: ' . $mapping_object['id'] . '. Salesforce Id: ' . $mapping_object['salesforce_id'] . '. WordPress object type: ' . $salesforce_mapping['wordpress_object'] . '</li>';
+										// translators: placeholders are: 1) the mapping object row ID, 2) the ID of the Salesforce object, 3) the WordPress object type
+										$body .= sprintf( '<li>' . esc_html__( 'Mapping object id: %1$s. Salesforce Id: %2$s. WordPress object type: %3$s', 'object-sync-for-salesforce' ) . '</li>',
+											absint( $mapping_object['id'] ),
+											esc_attr( $mapping_object['salesforce_id'] ),
+											esc_attr( $salesforce_mapping['wordpress_object'] )
+										);
 									}
-									$body .= '</ul>';
+									$body .= sprintf( '</ul>' );
 								}
 
 								if ( isset( $this->logging ) ) {
@@ -807,50 +909,66 @@ class Object_Sync_Sf_Salesforce_Pull {
 								}
 								$parent = 0;
 								$logging->setup(
-									__( $title, 'object-sync-for-salesforce' ),
+									$title,
 									$body,
 									$sf_sync_trigger,
 									$parent,
 									$status
 								);
-							}
+							} // End if().
 						} // End if().
 
-						// there is already a mapping object. don't change the wordpress data to match this new salesforce record, but log it
+						// there is already a mapping object. don't change the WordPress data to match this new Salesforce record, but log it
 						if ( isset( $mapping_object['id'] ) ) {
 							// set the transient so that salesforce_push doesn't start doing stuff, then return out of here
 							set_transient( 'salesforce_pulling_' . $mapping_object['id'], 1, $seconds );
 							set_transient( 'salesforce_pulling_object_id', $mapping_object['id'] );
 							// create log entry to indicate that nothing happened
 							$status = 'notice';
-							$title = ucfirst( $status ) . ': Because object map ' . $mapping_object['id'] . ' already exists, WordPress ' . $salesforce_mapping['wordpress_object'] . ' ' . $wordpress_id . ' was not mapped to Salesforce Id ' . $object['Id'];
-							$body = 'The WordPress ' . $salesforce_mapping['wordpress_object'] . ' with ' . $structure['id_field'] . ' of ' . $wordpress_id . ' is already mapped to the Salesforce ' . $salesforce_mapping['salesforce_object'] . ' with Id of ' . $mapping_object['salesforce_id'] . ' in the mapping object with id of ' . $mapping_object['id'] . '. The Salesforce ' . $salesforce_mapping['salesforce_object'] . ' with Id of ' . $object['Id'] . ' was created or modified in Salesforce, and would otherwise have been mapped to this WordPress record. No WordPress data has been changed to prevent changing user data without user intention.';
+							// translators: placeholders are: 1) mapping object row id, 2) WordPress object tyoe, 3) individual WordPress item ID, 4) individual Salesforce item ID
+							$title = sprintf( esc_html__( 'Notice: Because object map %1$s already exists, WordPress %2$s %3$s was not mapped to Salesforce Id %4$s', 'object-sync-for-salesforce' ),
+								absint( $mapping_object['id'] ),
+								esc_attr( $salesforce_mapping['wordpress_object'] ),
+								absint( $wordpress_id ),
+								esc_attr( $object['Id'] )
+							);
+
+							// translators: placeholders are 1) WordPress object type, 2) field name for the WordPress id, 3) the WordPress id value, 4) the Salesforce object type, 5) the Salesforce object Id that was modified, 6) the mapping object row id
+							$body = sprintf( esc_html__( 'The WordPress %1$s with %2$s of %3$s is already mapped to the Salesforce %4$s with Id of %5$s in the mapping object with id of %6$s. The Salesforce %4$s with Id of %5$s was created or modified in Salesforce, and would otherwise have been mapped to this WordPress record. No WordPress data has been changed to prevent changing data unintentionally.', 'object-sync-for-salesforce' ),
+								esc_attr( $salesforce_mapping['wordpress_object'] ),
+								esc_attr( $structure['id_field'] ),
+								absint( $wordpress_id ),
+								esc_attr( $salesforce_mapping['salesforce_object'] ),
+								esc_attr( $object['Id'] ),
+								absint( $mapping_object['id'] )
+							);
+
 							if ( isset( $this->logging ) ) {
 								$logging = $this->logging;
 							} elseif ( class_exists( 'Object_Sync_Sf_Logging' ) ) {
 								$logging = new Object_Sync_Sf_Logging( $this->wpdb, $this->version );
 							}
-							// if we know the wordpress object id we can put it in there
+							// if we know the WordPress object id we can put it in there
 							if ( null !== $wordpress_id ) {
 								$parent = $wordpress_id;
 							} else {
 								$parent = 0;
 							}
 							$logging->setup(
-								__( $title, 'object-sync-for-salesforce' ),
+								$title,
 								$body,
 								$sf_sync_trigger,
 								$parent,
 								$status
 							);
-							// exit out of here without saving any data in wordpress
+							// exit out of here without saving any data in WordPress
 							return;
-						}
+						} // End if().
 
 						// right here we should set the pulling transient
 						// this means we have to create the mapping object here as well, and update it with the correct IDs after successful response
 						// create the mapping object between the rows
-						$mapping_object_id = $this->create_object_map( $object, 0, $mapping );
+						$mapping_object_id = $this->create_object_map( $object, $this->mappings->generate_temporary_id( 'pull' ), $mapping );
 						set_transient( 'salesforce_pulling_' . $mapping_object_id, 1, $seconds );
 						set_transient( 'salesforce_pulling_object_id', $mapping_object_id );
 						$mapping_object = $this->mappings->get_object_maps(
@@ -859,13 +977,14 @@ class Object_Sync_Sf_Salesforce_Pull {
 							)
 						);
 
-						// now we can create the object in wp if we've gotten to this point
-						$result = $this->wordpress->object_create( $salesforce_mapping['wordpress_object'], $params );
+						// now we can upsert the object in wp if we've gotten to this point
+						// this command will either create or update the object
+						$result = $this->wordpress->object_upsert( $salesforce_mapping['wordpress_object'], $upsert_key, $upsert_value, $upsert_methods, $params, $salesforce_mapping['push_drafts'] );
 
 					} else {
 						// No key or prematch field exists on this field map object, create a new object in WordPress.
 						$op = 'Create';
-						$mapping_object_id = $this->create_object_map( $object, 0, $mapping );
+						$mapping_object_id = $this->create_object_map( $object, $this->mappings->generate_temporary_id( 'pull' ), $mapping );
 						set_transient( 'salesforce_pulling_' . $mapping_object_id, 1, $seconds );
 						set_transient( 'salesforce_pulling_object_id', $mapping_object_id );
 						$mapping_object = $this->mappings->get_object_maps(
@@ -879,18 +998,30 @@ class Object_Sync_Sf_Salesforce_Pull {
 				} catch ( WordpressException $e ) {
 					// create log entry for failed create or upsert
 					$status = 'error';
-					$title = ucfirst( $status ) . ': ' . $op . ' ' . $salesforce_mapping['wordpress_object'];
+
+					// translators: placeholders are: 1) what operation is happening, and 2) the name of the WordPress object
+					$title = sprintf( esc_html__( 'Error: %1$s %2$s', 'object-sync-for-salesforce' ),
+						esc_attr( $op ),
+						esc_attr( $salesforce_mapping['wordpress_object'] )
+					);
+
 					if ( null !== $salesforce_id ) {
 						$title .= ' ' . $salesforce_id;
 					}
-					$title .= ' (Salesforce ' . $salesforce_mapping['salesforce_object'] . ' with Id ' . ' of ' . $object['Id'] . ')';
+
+					// translators: placeholders are: 1) the name of the Salesforce object, and 2) Id of the Salesforce object
+					$title .= sprintf( esc_html__( ' (Salesforce %1$s with Id of %2$s)', 'object-sync-for-salesforce' ),
+						$salesforce_mapping['salesforce_object'],
+						$object['Id']
+					);
+
 					if ( isset( $this->logging ) ) {
 						$logging = $this->logging;
 					} elseif ( class_exists( 'Object_Sync_Sf_Logging' ) ) {
 						$logging = new Object_Sync_Sf_Logging( $this->wpdb, $this->version );
 					}
 
-					// if we know the wordpress object id we can put it in there
+					// if we know the WordPress object id we can put it in there
 					if ( null !== $wordpress_id ) {
 						$parent = $wordpress_id;
 					} else {
@@ -898,7 +1029,7 @@ class Object_Sync_Sf_Salesforce_Pull {
 					}
 
 					$logging->setup(
-						__( $title, 'object-sync-for-salesforce' ),
+						$title,
 						$e->getMessage(),
 						$sf_sync_trigger,
 						$parent,
@@ -929,9 +1060,9 @@ class Object_Sync_Sf_Salesforce_Pull {
 					$wordpress_id = 0;
 				}
 
-				// wordpress crud call was successful
-				// this means the object has already been created/updated in wordpress
-				// this is not redundant because this is where it creates the object mapping rows in wordpress if the object does not already have one (we are still inside $is_new === TRUE here)
+				// WordPress crud call was successful
+				// this means the object has already been created/updated in WordPress
+				// this is not redundant because this is where it creates the object mapping rows in WordPress if the object does not already have one (we are still inside $is_new === TRUE here)
 
 				if ( empty( $result['errors'] ) ) {
 					$status = 'success';
@@ -942,8 +1073,18 @@ class Object_Sync_Sf_Salesforce_Pull {
 						$logging = new Object_Sync_Sf_Logging( $this->wpdb, $this->version );
 					}
 
+					// translators: placeholders are: 1) what operation is happening, 2) the name of the WordPress object type, 3) the WordPress id field name, 4) the WordPress object id value, 5) the name of the Salesforce object, 6) the Salesforce Id value
+					$title = sprintf( esc_html__( 'Success: %1$s %2$s with %3$s of %4$s (Salesforce %5$s Id of %6$s)', 'object-sync-for-salesforce' ),
+						esc_attr( $op ),
+						esc_attr( $salesforce_mapping['wordpress_object'] ),
+						esc_attr( $object_id ),
+						esc_attr( $wordpress_id ),
+						esc_attr( $salesforce_mapping['salesforce_object'] ),
+						esc_attr( $object['Id'] )
+					);
+
 					$logging->setup(
-						__( ucfirst( $status ) . ': ' . $op . ' ' . $salesforce_mapping['wordpress_object'] . ' with ' . $object_id . ' of ' . $wordpress_id . ' (Salesforce ' . $salesforce_mapping['salesforce_object'] . ' ID of ' . $object['Id'] . ')', 'object-sync-for-salesforce' ),
+						$title,
 						'',
 						$sf_sync_trigger,
 						$wordpress_id,
@@ -969,12 +1110,28 @@ class Object_Sync_Sf_Salesforce_Pull {
 					}
 
 					if ( is_object( $wordpress_id ) ) {
+						// print this array because if this happens, something weird has happened and we want to log whatever we have
 						$wordpress_id = print_r( $wordpress_id, true );
 					}
 
+					// translators: placeholders are: 1) what operation is happening, 2) the name of the Salesforce object type, 3) the Salesforce object Id value
+					$title = sprintf( esc_html__( 'Error syncing: %1$s to WordPress (Salesforce %2$s Id %3$s)', 'object-sync-for-salesforce' ),
+						esc_attr( $op ),
+						esc_attr( $salesforce_mapping['salesforce_object'] ),
+						esc_attr( $object['Id'] )
+					);
+
+					// translators: placeholders are: 1) the name of the WordPress object type, 2) the WordPress id field name, 3) the WordPress id field value, 4) the array of errors
+					$body = sprintf( '<p>' . esc_html__( 'Object: %1$s with %2$s of %3$s', 'object-sync-for-salesforce' ) . '</p><p>' . esc_html__( 'Message: ', 'object-sync-for-salesforce' ) . '%4$s',
+						esc_attr( $salesforce_mapping['wordpress_object'] ),
+						esc_attr( $object_id ),
+						esc_attr( $wordpress_id ),
+						print_r( $result['errors'], true ) // if we get this error, we need to know whatever we have
+					);
+
 					$logging->setup(
-						__( $status . ' syncing: ' . $op . ' to WordPress (Salesforce ' . $salesforce_mapping['salesforce_object'] . ' Id ' . $object['Id'] . ')', 'object-sync-for-salesforce' ),
-						'Object: ' . $salesforce_mapping['wordpress_object'] . ' with ' . $object_id . ' of ' . $wordpress_id . '<br>br>' . 'Message: ' . print_r( $result['errors'], true ),
+						$title,
+						$body,
 						$sf_sync_trigger,
 						$wordpress_id,
 						$status
@@ -985,14 +1142,14 @@ class Object_Sync_Sf_Salesforce_Pull {
 
 					return;
 				} // End if().
-			} elseif ( false === $is_new && ( $sf_sync_trigger == $this->mappings->sync_sf_update ) ) {
+			} elseif ( false === $is_new ) {
 
 				// right here we should set the pulling transient
 				set_transient( 'salesforce_pulling_' . $mapping_object['id'], 1, $seconds );
 				set_transient( 'salesforce_pulling_object_id', $mapping_object['id'] );
 
 				// there is an existing object link
-				// if the last sync is greater than the last time this object was updated by salesforce, skip it
+				// if the last sync is greater than the last time this object was updated by Salesforce, skip it
 				// this keeps us from doing redundant syncs
 				// because SF stores all DateTimes in UTC.
 				$mapping_object['object_updated'] = current_time( 'mysql' );
@@ -1002,7 +1159,7 @@ class Object_Sync_Sf_Salesforce_Pull {
 
 				try {
 
-					// hook to allow other plugins to do something right before wordpress data is saved
+					// hook to allow other plugins to do something right before WordPress data is saved
 					// ex: run outside methods on an object if it exists, or do something in preparation for it if it doesn't
 					do_action( 'object_sync_for_salesforce_pre_pull', $mapping_object['wordpress_id'], $mapping, $object, $object_id, $params );
 
@@ -1010,7 +1167,7 @@ class Object_Sync_Sf_Salesforce_Pull {
 					$result = $this->wordpress->object_update( $salesforce_mapping['wordpress_object'], $mapping_object['wordpress_id'], $params );
 
 					$mapping_object['last_sync_status'] = $this->mappings->status_success;
-					$mapping_object['last_sync_message'] = __( 'Mapping object updated via function: ', 'object-sync-for-salesforce' ) . __FUNCTION__;
+					$mapping_object['last_sync_message'] = esc_html__( 'Mapping object updated via function: ', 'object-sync-for-salesforce' ) . __FUNCTION__;
 
 					$status = 'success';
 					if ( isset( $this->logging ) ) {
@@ -1019,8 +1176,18 @@ class Object_Sync_Sf_Salesforce_Pull {
 						$logging = new Object_Sync_Sf_Logging( $this->wpdb, $this->version );
 					}
 
+					// translators: placeholders are: 1) what operation is happening, 2) the name of the WordPress object type, 3) the WordPress id field name, 4) the WordPress object id value, 5) the name of the Salesforce object, 6) the Salesforce Id value
+					$title = sprintf( esc_html__( 'Success: %1$s %2$s with %3$s of %4$s (Salesforce %5$s Id of %6$s)', 'object-sync-for-salesforce' ),
+						esc_attr( $op ),
+						esc_attr( $salesforce_mapping['wordpress_object'] ),
+						esc_attr( $object_id ),
+						esc_attr( $mapping_object['wordpress_id'] ),
+						esc_attr( $salesforce_mapping['salesforce_object'] ),
+						esc_attr( $object['Id'] )
+					);
+
 					$logging->setup(
-						__( ucfirst( $status ) . ': ' . $op . ' ' . $salesforce_mapping['wordpress_object'] . ' with ' . $object_id . ' of ' . $mapping_object['wordpress_id'] . ' (Salesforce ' . $salesforce_mapping['salesforce_object'] . ' with Id of ' . $object['Id'] . ')', 'object-sync-for-salesforce' ),
+						$title,
 						'',
 						$sf_sync_trigger,
 						$mapping_object['wordpress_id'],
@@ -1039,8 +1206,18 @@ class Object_Sync_Sf_Salesforce_Pull {
 						$logging = new Object_Sync_Sf_Logging( $this->wpdb, $this->version );
 					}
 
+					// translators: placeholders are: 1) what operation is happening, 2) the name of the WordPress object, 3) the WordPress id field name, 4) the WordPress object id value, 5) the name of the Salesforce object, 6) the Salesforce Id value
+					$title .= sprintf( esc_html__( 'Error: %1$s %2$s with %3$s of %4$s (Salesforce %5$s with Id of %6$s)', 'object-sync-for-salesforce' ),
+						esc_attr( $op ),
+						esc_attr( $salesforce_mapping['wordpress_object'] ),
+						esc_attr( $object_id ),
+						esc_attr( $mapping_object['wordpress_id'] ),
+						esc_attr( $salesforce_mapping['salesforce_object'] ),
+						esc_attr( $object['Id'] )
+					);
+
 					$logging->setup(
-						__( ucfirst( $status ) . ': ' . $op . ' ' . $salesforce_mapping['wordpress_object'] . ' with ' . $object_id . ' of ' . $mapping_object['wordpress_id'] . ' (Salesforce ' . $salesforce_mapping['salesforce_object'] . ' with Id of ' . $object['Id'] . ')', 'object-sync-for-salesforce' ),
+						$title,
 						$e->getMessage(),
 						$sf_sync_trigger,
 						$mapping_object['wordpress_id'],
@@ -1067,17 +1244,16 @@ class Object_Sync_Sf_Salesforce_Pull {
 
 				// need to move these into the success check
 
-				// maybe can check to see if we actually updated anything in wordpress
+				// maybe can check to see if we actually updated anything in WordPress
 				// tell the mapping object - whether it is new or already existed - how we just used it
 				$mapping_object['last_sync_action'] = 'pull';
 				$mapping_object['last_sync'] = current_time( 'mysql' );
 
-				// update that mapping object. the salesforce data version will be set here as well because we set it earlier
+				// update that mapping object. the Salesforce data version will be set here as well because we set it earlier
 				$result = $this->mappings->update_object_map( $mapping_object, $mapping_object['id'] );
-
+				// end of the if statement for is_new & update or create trigger
+				// this keeps stuff from running too many times, and also keeps it from using the wrong methods. we don't need a generic } else { here at this time.
 			} // End if().
-			// end of the if statement for is_new & update or create trigger
-			// this keeps stuff from running too many times, and also keeps it from using the wrong methods. we don't need a generic } else { here at this time.
 		} // End foreach().
 
 		// delete transients that we've already processed
@@ -1086,7 +1262,7 @@ class Object_Sync_Sf_Salesforce_Pull {
 		}
 
 		$pushing_id = get_transient( 'salesforce_pushing_object_id' );
-		if ( in_array( $pushing_id, $transients_to_delete ) ) {
+		if ( in_array( $pushing_id, $transients_to_delete, true ) ) {
 			delete_transient( 'salesforce_pushing_object_id' );
 		}
 
@@ -1100,14 +1276,14 @@ class Object_Sync_Sf_Salesforce_Pull {
 	* Create an object map between a Salesforce object and a WordPress object
 	*
 	* @param array $salesforce_object
-	*	Array of the salesforce object's data
+	*   Array of the salesforce object's data
 	* @param string $wordpress_id
-	*	Unique identifier for the WordPress object
+	*   Unique identifier for the WordPress object
 	* @param array $field_mapping
-	*	The row that maps the object types together, including which fields match which other fields
+	*   The row that maps the object types together, including which fields match which other fields
 	*
 	* @return int $wpdb->insert_id
-	*	This is the database row for the map object
+	*   This is the database row for the map object
 	*
 	*/
 	private function create_object_map( $salesforce_object, $wordpress_id, $field_mapping ) {
@@ -1120,7 +1296,7 @@ class Object_Sync_Sf_Salesforce_Pull {
 				'last_sync' => current_time( 'mysql' ),
 				'last_sync_action' => 'pull',
 				'last_sync_status' => $this->mappings->status_success,
-				'last_sync_message' => __( 'Mapping object created via function: ', 'object-sync-for-salesforce' ) . __FUNCTION__,
+				'last_sync_message' => esc_html__( 'Mapping object created via function: ', 'object-sync-for-salesforce' ) . __FUNCTION__,
 				'action' => 'created',
 			)
 		);
