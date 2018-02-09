@@ -214,6 +214,25 @@ class Object_Sync_Sf_Salesforce_Pull {
 							'sf_sync_trigger' => $sf_sync_trigger, // use the appropriate trigger based on when this was created
 						);
 
+						// Hook to allow other plugins to prevent a pull per-mapping.
+						// Putting the pull_allowed hook here will keep the queue from storing data when it is not supposed to store it
+						$pull_allowed = apply_filters( 'object_sync_for_salesforce_pull_object_allowed', true, $type, $result, $sf_sync_trigger, $salesforce_mapping );
+
+						// example to keep from pulling the Contact with id of abcdef
+						/*
+						add_filter( 'object_sync_for_salesforce_pull_object_allowed', 'check_user', 10, 5 );
+						// can always reduce this number if all the arguments are not necessary
+						function check_user( $pull_allowed, $object_type, $object, $sf_sync_trigger, $salesforce_mapping ) {
+							if ( $object_type === 'Contact' && $object['Id'] === 'abcdef' ) {
+								return false;
+							}
+						}
+						*/
+
+						if ( false === $pull_allowed ) {
+							continue;
+						}
+
 						// Initialize the queue with the data for this record and save
 						$this->schedule->data( array( $data ) );
 						$this->schedule->save()->dispatch();
@@ -269,9 +288,6 @@ class Object_Sync_Sf_Salesforce_Pull {
 
 					$next_records_url = isset( $new_response['nextRecordsUrl'] ) ? str_replace( $version_path, '', $new_response['nextRecordsUrl'] ) : false;
 				}
-
-				update_option( 'object_sync_for_salesforce_pull_last_sync_' . $type, current_time( 'timestamp', true ) );
-
 			} else {
 
 				// create log entry for failed pull
@@ -445,6 +461,8 @@ class Object_Sync_Sf_Salesforce_Pull {
 
 				foreach ( $deleted['data']['deletedRecords'] as $result ) {
 
+					$sf_sync_trigger = $this->mappings->sync_sf_delete;
+
 					// salesforce seriously returns Id for update requests and id for delete requests and this makes no sense but maybe one day they might change it somehow?
 					if ( ! isset( $result['Id'] ) && isset( $result['id'] ) ) {
 						$result['Id'] = $result['id'];
@@ -453,8 +471,28 @@ class Object_Sync_Sf_Salesforce_Pull {
 						'object_type' => $type,
 						'object' => $result,
 						'mapping' => $mapping,
-						'sf_sync_trigger' => $this->mappings->sync_sf_delete, // sf delete trigger
+						'sf_sync_trigger' => $sf_sync_trigger, // sf delete trigger
 					);
+
+					// Hook to allow other plugins to prevent a pull per-mapping.
+					// Putting the pull_allowed hook here will keep the queue from storing data when it is not supposed to store it
+					$pull_allowed = apply_filters( 'object_sync_for_salesforce_pull_object_allowed', true, $type, $result, $sf_sync_trigger, $salesforce_mapping );
+
+					// example to keep from pulling the Contact with id of abcdef
+					/*
+					add_filter( 'object_sync_for_salesforce_pull_object_allowed', 'check_user', 10, 5 );
+					// can always reduce this number if all the arguments are not necessary
+					function check_user( $pull_allowed, $object_type, $object, $sf_sync_trigger, $salesforce_mapping ) {
+						if ( $object_type === 'Contact' && $object['Id'] === 'abcdef' ) {
+							return false;
+						}
+					}
+					*/
+
+					if ( false === $pull_allowed ) {
+						continue;
+					}
+
 					$this->schedule->push_to_queue( $data );
 					$this->schedule->save()->dispatch();
 
@@ -545,24 +583,6 @@ class Object_Sync_Sf_Salesforce_Pull {
 					$status
 				);
 				return;
-			}
-
-			// hook to allow other plugins to prevent a pull per-mapping.
-			$pull_allowed = apply_filters( 'object_sync_for_salesforce_pull_object_allowed', true, $object_type, $object, $sf_sync_trigger, $salesforce_mapping );
-
-			// example to keep from pulling the Contact with id of abcdef
-			/*
-			add_filter( 'object_sync_for_salesforce_pull_object_allowed', 'check_user', 10, 5 );
-			// can always reduce this number if all the arguments are not necessary
-			function check_user( $pull_allowed, $object_type, $object, $sf_sync_trigger, $salesforce_mapping ) {
-				if ( $object_type === 'Contact' && $object['Id'] === 'abcdef' ) {
-					return false;
-				}
-			}
-			*/
-
-			if ( false === $pull_allowed ) {
-				continue;
 			}
 
 			// if there's already a connection between the objects, $mapping_object will be an array

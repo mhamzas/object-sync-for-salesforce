@@ -72,25 +72,25 @@ class Object_Sync_Sf_Salesforce_Push {
 			foreach ( $this->mappings->get_fieldmaps() as $mapping ) {
 				$object_type = $mapping['wordpress_object'];
 				if ( 'user' === $object_type ) {
-					add_action( 'user_register', array( $this, 'add_user' ) );
-					add_action( 'profile_update', array( $this, 'edit_user' ), 10, 2 );
+					add_action( 'user_register', array( $this, 'add_user' ), 11, 1 );
+					add_action( 'profile_update', array( $this, 'edit_user' ), 11, 2 );
 					add_action( 'delete_user', array( $this, 'delete_user' ) );
 				} elseif ( 'post' === $object_type ) {
-					add_action( 'save_post', array( $this, 'post_actions' ), 10, 2 );
+					add_action( 'save_post', array( $this, 'post_actions' ), 11, 2 );
 				} elseif ( 'attachment' === $object_type ) {
 					add_action( 'add_attachment', array( $this, 'add_attachment' ) );
 					add_action( 'edit_attachment', array( $this, 'edit_attachment' ) );
 					add_action( 'delete_attachment', array( $this, 'delete_attachment' ) );
 				} elseif ( 'category' === $object_type || 'tag' === $object_type || 'post_tag' === $object_type ) {
-					add_action( 'create_term', array( $this, 'add_term' ), 10, 3 );
-					add_action( 'edit_terms', array( $this, 'edit_term' ), 10, 2 );
+					add_action( 'create_term', array( $this, 'add_term' ), 11, 3 );
+					add_action( 'edit_terms', array( $this, 'edit_term' ), 11, 2 );
 					add_action( 'delete_term', array( $this, 'delete_term' ), 10, 4 );
 				} elseif ( 'comment' === $object_type ) {
-					add_action( 'comment_post', array( $this, 'add_comment' ), 10, 3 );
+					add_action( 'comment_post', array( $this, 'add_comment' ), 11, 3 );
 					add_action( 'edit_comment', array( $this, 'edit_comment' ) );
 					add_action( 'delete_comment', array( $this, 'delete_comment' ) ); // to be clear: this only runs when the comment gets deleted from the trash, either manually or automatically
 				} else { // this is for custom post types
-					add_action( 'save_post_' . $object_type, array( $this, 'post_actions' ), 10, 2 );
+					add_action( 'save_post_' . $object_type, array( $this, 'post_actions' ), 11, 2 );
 				}
 			}
 		}
@@ -166,6 +166,20 @@ class Object_Sync_Sf_Salesforce_Push {
 			$update = 0;
 			$delete = 1;
 		}
+
+		// add support for woocommerce if it is installed
+		if ( defined( 'WC_VERSION' ) ) {
+			// statuses to ignore
+			if ( isset( $post->post_status ) && in_array( $post->post_status, array( 'wc-pending' ), true ) ) {
+				return;
+			}
+			// statuses to count as new. note that the api will also check to see if it already has been mapped before saving.
+			if ( isset( $post->post_status ) && in_array( $post->post_status, array( 'wc-on-hold', 'wc-processing' ), true ) ) {
+				$update = 0;
+				$delete = 0;
+			}
+		}
+
 		$post = $this->wordpress->get_wordpress_object_data( $post->post_type, $post_id );
 		if ( 1 === $update ) {
 			$this->object_update( $post, $post_type );
@@ -358,6 +372,7 @@ class Object_Sync_Sf_Salesforce_Push {
 				$title,
 				print_r( $object, true ), // print this array because if this happens, something weird has happened and we want to log whatever we have
 				$sf_sync_trigger,
+				0, // parent id goes here but we don't have one, so make it 0
 				$status
 			);
 			return;

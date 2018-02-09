@@ -65,22 +65,23 @@ class Object_Sync_Sf_Activate {
 			salesforce_object varchar(255) NOT NULL DEFAULT '',
 			salesforce_record_types_allowed longblob,
 			salesforce_record_type_default varchar(255) NOT NULL DEFAULT '',
-			fields text NOT NULL,
+			fields longtext NOT NULL,
 			pull_trigger_field varchar(128) NOT NULL DEFAULT 'LastModifiedDate',
 			sync_triggers text NOT NULL,
 			push_async tinyint(1) NOT NULL DEFAULT '0',
 			push_drafts tinyint(1) NOT NULL DEFAULT '0',
 			weight tinyint(1) NOT NULL DEFAULT '0',
+			version varchar(255) NOT NULL DEFAULT '',
 			PRIMARY KEY  (id),
 			UNIQUE KEY name (name),
 			KEY name_sf_type_wordpress_type (wordpress_object,salesforce_object)
-		) $charset_collate";
+		) ENGINE=InnoDB $charset_collate";
 
 		$object_map_table = $this->wpdb->prefix . 'object_sync_sf_object_map';
 		$object_map_sql = "CREATE TABLE $object_map_table (
 			id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
 			wordpress_id varchar(32) NOT NULL,
-			salesforce_id varchar(32) NOT NULL DEFAULT '',
+			salesforce_id varbinary(32) NOT NULL DEFAULT '',
 			wordpress_object varchar(128) NOT NULL DEFAULT '',
 			created datetime NOT NULL DEFAULT '0000-00-00 00:00:00',
 			object_updated datetime NOT NULL DEFAULT '0000-00-00 00:00:00',

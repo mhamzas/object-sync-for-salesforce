@@ -171,10 +171,26 @@
 					<th class="column-is_delete"><?php echo esc_html__( 'Delete', 'object-sync-for-salesforce' ); ?></th>
 				</tr>
 			</thead>
+			<tfoot>
+				<tr>
+					<td colspan="6">
+						<p><small>
+							<?php
+							// translators: the placeholders refer to: 1) the cache clear link, 2) the cache clear link text
+							echo sprintf( '<strong>' . esc_html__( 'Note:', 'object-sync-for-salesforce' ) . '</strong>' . esc_html__( ' to map a custom meta field (such as wp_postmeta, wp_usermeta, wp_termmeta, etc.), WordPress must have at least one value for that field. If you add a new meta field and want to map it, make sure to add a value for it and ', 'object-sync-for-salesforce' ) . '<a href="%1$s" id="clear-sfwp-cache">%2$s</a>' . esc_html__( ' to see the field listed here', 'object-sync-for-salesforce' ),
+								esc_url( get_admin_url( null, 'options-general.php?page=object-sync-salesforce-admin&tab=clear_cache' ) ),
+								esc_html__( 'clear the plugin cache' )
+							);
+							?>
+						</small></p>
+					</td>
+				</tr>
+			</tfoot>
 			<tbody>
 				<?php
 				if ( isset( $fieldmap_fields ) && null !== $fieldmap_fields && is_array( $fieldmap_fields ) ) {
 					foreach ( $fieldmap_fields as $key => $value ) {
+						$key = md5( $key . time() );
 				?>
 				<tr>
 					<td class="column-wordpress_field">
@@ -208,7 +224,10 @@
 								)
 							);
 							foreach ( $salesforce_fields as $salesforce_field ) {
-								if ( isset( $value['salesforce_field']['label'] ) && $value['salesforce_field']['label'] === $salesforce_field['name'] ) {
+								if ( isset( $value['salesforce_field']['name'] ) && $value['salesforce_field']['name'] === $salesforce_field['name'] ) {
+									$selected = ' selected';
+								} elseif ( isset( $value['salesforce_field']['label'] ) && $value['salesforce_field']['label'] === $salesforce_field['name'] ) {
+									// this conditional is for versions up to 1.1.2, but i think it's fine to leave it for now. if we remove it, people's fieldmaps will not show correctly in the admin.
 									$selected = ' selected';
 								} else {
 									$selected = '';
@@ -406,12 +425,24 @@
 			<label><input type="checkbox" name="push_drafts" id="push-drafts" value="1" <?php echo isset( $push_drafts ) && '1' === $push_drafts ? ' checked' : ''; ?>><?php echo esc_html__( 'Push drafts', 'object-sync-for-salesforce' ); ?></label>
 			<p class="description"><?php echo esc_html__( 'If selected, WordPress will send drafts of this object type (if it creates drafts for it) to Salesforce.', 'object-sync-for-salesforce' ); ?></p>
 		</div>
+		<?php
+		/*
+		// we should make this visible when we can successfully sync multiple WordPress objects to the same Salesforce object.
+		See this support issue: https://wordpress.org/support/topic/cant-map-multiple-wordpress-objects-to-the-same-salesforce-object/
+		And this GitHub issue: https://github.com/MinnPost/object-sync-for-salesforce/issues/135
 		<div class="fieldmap_label">
 			<label for="label"><?php echo esc_html__( 'Weight', 'object-sync-for-salesforce' ); ?>: </label>
 			<input type="number" id="weight" name="weight" value="<?php echo isset( $weight ) ? esc_html( $weight ) : ''; ?>" />
 			<p class="description"><?php echo esc_html__( 'Weight is intended for use when you have multiple fieldmaps for the same object, either in WordPress or Salesforce.', 'object-sync-for-salesforce' ); ?></p>
 			<p class="description"><?php echo sprintf( 'For example, if you map WordPress users to Salesforce Contacts, and then map the users to Salesforce Leads as well, you could assign a numeric weight to indicate which one gets processed first. Otherwise, you can safely leave it blank. If present, sorting occurs in ascending order.' ); ?></p>
 		</div>
+		*/
+		?>
 	</fieldset>
-	<?php submit_button( ucfirst( $method ) . ' fieldmap' ); ?>
+	<?php
+		submit_button(
+			// translators: the placeholder refers to the currently selected method (add, edit, or clone)
+			sprintf( esc_html__( '%1$s fieldmap', 'object-sync-for-salesforce' ), ucfirst( $method ) )
+		);
+	?>
 </form>

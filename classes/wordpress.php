@@ -47,6 +47,8 @@ class Object_Sync_Sf_WordPress {
 			'type' => 'read',
 		);
 
+		$this->sfwp_transients = new Object_Sync_Sf_WordPress_Transient( 'sfwp_transients' );
+
 		$this->debug = get_option( 'object_sync_for_salesforce_debug_mode', false );
 
 	}
@@ -62,33 +64,30 @@ class Object_Sync_Sf_WordPress {
 		 * Here's an example of filters to add/remove types:
 		 *
 			add_filter( 'object_sync_for_salesforce_add_more_wordpress_types', 'add_more_types', 10, 1 );
-			function add_more_types( $more_types ) {
-				$more_types = array( 'foo' );
-				// or $more_types[] = 'foo';
-				return $more_types;
+			function add_more_types( $wordpress_object_types ) {
+				$wordpress_object_types[] = 'foo'; // this will add to the existing types.
+				return $wordpress_object_types;
 			}
 
-			add_filter( 'object_sync_for_salesforce_remove_wordpress_types', 'remove_types', 10, 1 );
+			add_filter( 'object_sync_for_salesforce_remove_wordpress_types', 'wordpress_object_types', 10, 1 );
 			function remove_types( $types_to_remove ) {
-				$types_to_remove = array( 'acme_product' );
-				// or $types_to_remove[] = 'acme_product';
+				$types_to_remove[] = 'revision'; // this adds to the array of types to ignore
 				return $types_to_remove;
 			}
 		*/
-		$wordpress_types_not_posts_include = apply_filters( 'object_sync_for_salesforce_add_more_wordpress_types', array() );
-		$wordpress_types_ignore = apply_filters( 'object_sync_for_salesforce_remove_wordpress_types', array( 'wp_log' ) );
 
-		$wordpress_objects = array();
+		// this should include the available object types and send them to the hook
+		$wordpress_types_not_posts_include = array( 'user', 'comment', 'category', 'tag' );
+		$wordpress_objects = array_merge( get_post_types(), $wordpress_types_not_posts_include );
+		// this should be all the objects
+		$wordpress_objects = apply_filters( 'object_sync_for_salesforce_add_more_wordpress_types', $wordpress_objects );
 
-		if ( empty( $wordpress_types_not_posts_include ) ) {
-			$wordpress_types_not_posts_include = array( 'user', 'comment', 'category', 'tag' );
-		}
+		// by default, only remove the log type we use in this plugin
+		$types_to_remove = apply_filters( 'object_sync_for_salesforce_remove_wordpress_types', array( 'wp_log' ) );
 
-		$wordpress_objects = get_post_types();
-		$wordpress_objects = array_merge( $wordpress_objects, $wordpress_types_not_posts_include );
-
-		if ( ! empty( $wordpress_types_ignore ) ) {
-			$wordpress_objects = array_diff( $wordpress_objects, $wordpress_types_ignore );
+		// if the hook filters out any types, remove them from the visible list
+		if ( ! empty( $types_to_remove ) ) {
+			$wordpress_objects = array_diff( $wordpress_objects, $types_to_remove );
 		}
 
 		sort( $wordpress_objects );
@@ -257,9 +256,9 @@ class Object_Sync_Sf_WordPress {
 		$object_table_structure = $this->get_wordpress_table_structure( $wordpress_object );
 
 		$meta_table = $object_table_structure['meta_table'];
-		$meta_methods = $object_table_structure['meta_methods'];
+		$meta_methods = maybe_unserialize( $object_table_structure['meta_methods'] );
 		$content_table = $object_table_structure['content_table'];
-		$content_methods = $object_table_structure['content_methods'];
+		$content_methods = maybe_unserialize( $object_table_structure['content_methods'] );
 		$id_field = $object_table_structure['id_field'];
 		$object_name = $object_table_structure['object_name'];
 		$where = $object_table_structure['where'];
@@ -311,6 +310,16 @@ class Object_Sync_Sf_WordPress {
 	public function get_wordpress_object_data( $object_type, $object_id ) {
 
 		$wordpress_object = array();
+		$object_table_structure = $this->get_wordpress_table_structure( $object_type );
+
+		$meta_table = $object_table_structure['meta_table'];
+		$meta_methods = maybe_unserialize( $object_table_structure['meta_methods'] );
+		$content_table = $object_table_structure['content_table'];
+		$content_methods = maybe_unserialize( $object_table_structure['content_methods'] );
+		$id_field = $object_table_structure['id_field'];
+		$object_name = $object_table_structure['object_name'];
+		$where = $object_table_structure['where'];
+		$ignore_keys = $object_table_structure['ignore_keys'];
 
 		if ( 'user' === $object_type ) {
 			$data = get_userdata( $object_id );
@@ -330,10 +339,19 @@ class Object_Sync_Sf_WordPress {
 			$wordpress_object[ $field ] = $data->{$field};
 		}
 
-		// Developers can use this hook to change the WordPress object,
-		// including any formatting that needs to happen to the data.
-		// The returned $wordpress_object needs to be an array like described above.
-		// This is useful for custom objects or custom formatting.
+		/*
+		 * Allow developers to change the WordPress object, including any formatting that needs to happen to the data.
+		 * The returned $wordpress_object needs to be an array like described above.
+		 * This is useful for custom objects, hidden fields, or custom formatting.
+		 * Here's an example of filters to add/modify data:
+		 *
+			add_filter( 'object_sync_for_salesforce_wordpress_object_data', 'modify_data', 10, 1 );
+			function modify_data( $wordpress_object ) {
+				$wordpress_object['field_a'] = 'i am a field value that salesforce wants to store but WordPress does not care about';
+				return $wordpress_object;
+			}
+		*/
+
 		$wordpress_object = apply_filters( 'object_sync_for_salesforce_wordpress_object_data', $wordpress_object );
 
 		return $wordpress_object;
@@ -346,7 +364,7 @@ class Object_Sync_Sf_WordPress {
 	 *
 	 * @param string $url The API call we'd like to make.
 	 * @param array  $args The arguents of the API call.
-	 * @return get_transient $cachekey
+	 * @return $this->sfwp_transients->get $cachekey
 	 */
 	public function cache_get( $url, $args ) {
 		if ( is_array( $args ) ) {
@@ -355,8 +373,9 @@ class Object_Sync_Sf_WordPress {
 		} else {
 			$args .= $url;
 		}
+
 		$cachekey = md5( wp_json_encode( $args ) );
-		return get_transient( $cachekey );
+		return $this->sfwp_transients->get( $cachekey );
 	}
 
 	/**
@@ -367,7 +386,7 @@ class Object_Sync_Sf_WordPress {
 	 * @param array  $data The data received.
 	 * @param string $cache_expiration How long to keep the cache result around for.
 	 * @return Bool whether or not the value was set
-	 * @link https://developer.wordpress.org/reference/functions/set_transient/
+	 * @link https://wordpress.stackexchange.com/questions/174330/transient-storage-location-database-xcache-w3total-cache
 	 */
 	public function cache_set( $url, $args, $data, $cache_expiration = '' ) {
 		if ( is_array( $args ) ) {
@@ -382,7 +401,7 @@ class Object_Sync_Sf_WordPress {
 		if ( '' === $cache_expiration ) {
 			$cache_expiration = $this->options['cache_expiration'];
 		}
-		return set_transient( $cachekey, $data, $cache_expiration );
+		return $this->sfwp_transients->set( $cachekey, $data, $cache_expiration );
 	}
 
 	/**
@@ -421,6 +440,7 @@ class Object_Sync_Sf_WordPress {
 		// Maybe a box for a custom query, since custom fields get done in so many ways.
 		// Eventually this would be the kind of thing we could use fields api for, if it ever gets done.
 		$data_fields = $this->wpdb->get_col( "DESC {$content_table}", 0 );
+		$data_field_types = $this->wpdb->get_col( "DESC {$content_table}", 1 ); // get the database field types
 
 		if ( is_array( $meta_table ) ) {
 			$tax_table = $meta_table[1];
@@ -443,7 +463,8 @@ class Object_Sync_Sf_WordPress {
 				$all_fields[] = array(
 					'key' => $value,
 					'table' => $content_table,
-					'methods' => $content_methods,
+					'methods' => serialize( $content_methods ),
+					'type' => $data_field_types[ $key ],
 				);
 			}
 		}
@@ -453,7 +474,7 @@ class Object_Sync_Sf_WordPress {
 				$all_fields[] = array(
 					'key' => $value->meta_key,
 					'table' => $meta_table,
-					'methods' => $meta_methods,
+					'methods' => serialize( $meta_methods ),
 				);
 			}
 		}
@@ -466,7 +487,7 @@ class Object_Sync_Sf_WordPress {
 					$all_fields[] = array(
 						'key' => $value,
 						'table' => $tax_table,
-						'methods' => $content_methods,
+						'methods' => serialize( $content_methods ),
 					);
 				}
 			}
@@ -610,7 +631,7 @@ class Object_Sync_Sf_WordPress {
 				 * $success should be a boolean value
 				 *     $result = array( 'data' => array( $id_field => $post_id, 'success' => $success ), 'errors' => $errors );
 				 * Use hook like this:
-				 *     add_filter( 'object_sync_for_salesforce_upsert_custom_wordpress_item', add_object, 10, 1 );
+				 *     add_filter( 'object_sync_for_salesforce_upsert_custom_wordpress_item', upsert_object, 10, 1 );
 				 * The one param is:
 				 *     array( 'key' => key, 'value' => value, 'methods' => methods, 'params' => array_of_params, 'id_field' => idfield, 'push_drafts' => pushdrafts, 'name' => name, 'check_only' => $check_only )
 				*/
@@ -685,7 +706,7 @@ class Object_Sync_Sf_WordPress {
 				 * $success should be a boolean value
 				 *     $result = array( 'data' => array( $id_field => $post_id, 'success' => $success ), 'errors' => $errors );
 				 * Use hook like this:
-				 *     add_filter( 'object_sync_for_salesforce_update_custom_wordpress_item', add_object, 10, 1 );
+				 *     add_filter( 'object_sync_for_salesforce_update_custom_wordpress_item', update_object, 10, 1 );
 				 * The one param is:
 				 *     array( 'key' => key, 'value' => value, 'name' => objecttype, 'params' => array_of_params, 'push_drafts' => pushdrafts, 'methods' => methods )
 				 */
@@ -746,7 +767,7 @@ class Object_Sync_Sf_WordPress {
 				 * Developers can use this hook to delete objects with their own methods.
 				 * The returned $success is an object of the correct type, or a FALSE
 				 * Use hook like:
-				 *     add_filter( 'object_sync_for_salesforce_delete_custom_wordpress_item', add_object, 10, 1 );
+				 *     add_filter( 'object_sync_for_salesforce_delete_custom_wordpress_item', delete_object, 10, 1 );
 				 * The one param is:
 				 *     array( 'id' => id, 'name' => objecttype )
 				 */
@@ -829,6 +850,7 @@ class Object_Sync_Sf_WordPress {
 				$errors = array();
 				foreach ( $params as $key => $value ) {
 					$method = $value['method_modify'];
+					// we need to provide a way for passing the values in a custom order here
 					$meta_id = $method( $user_id, $key, $value['value'] );
 					if ( false === $meta_id ) {
 						$success = false;
@@ -1082,9 +1104,12 @@ class Object_Sync_Sf_WordPress {
 	 *     success: 1
 	 *   "errors" : [ ],
 	 */
-	private function post_create( $params, $id_field = 'ID', $post_type = '' ) {
+	private function post_create( $params, $id_field = 'ID', $post_type = 'post' ) {
+		// Load all params with a method_modify of the object structure's content_method into $content
+		$content = array();
+		$structure = $this->get_wordpress_table_structure( $post_type );
 		foreach ( $params as $key => $value ) {
-			if ( 'wp_insert_post' === $value['method_modify'] ) {
+			if ( in_array( $value['method_modify'], $structure['content_methods'] ) ) {
 				$content[ $key ] = $value['value'];
 				unset( $params[ $key ] );
 			}
@@ -1406,9 +1431,12 @@ class Object_Sync_Sf_WordPress {
 	 *   "errors" : [ ],
 	 */
 	private function attachment_create( $params, $id_field = 'ID' ) {
+		// Load all params with a method_modify of the object structure's content_method into $content
+		$content = array();
+		$structure = $this->get_wordpress_table_structure( 'attachment' );
 		// WP requires post_title, post_content (can be empty), post_status, and post_mime_type to create an attachment.
 		foreach ( $params as $key => $value ) {
-			if ( 'wp_insert_attachment' === $value['method_modify'] ) {
+			if ( in_array( $value['method_modify'], $structure['content_methods'] ) ) {
 				$content[ $key ] = $value['value'];
 				unset( $params[ $key ] );
 			}
@@ -1742,13 +1770,16 @@ class Object_Sync_Sf_WordPress {
 		if ( 'tag' === $taxonomy ) {
 			$taxonomy = 'post_tag';
 		}
+		// Load all params with a method_modify of the object structure's content_method into $content
+		$content = array();
+		$structure = $this->get_wordpress_table_structure( $taxonomy );
 		$args = array();
 		foreach ( $params as $key => $value ) {
 			if ( 'name' === $key ) {
 				$name = $value['value'];
 				unset( $params[ $key ] );
 			}
-			if ( 'wp_insert_term' === $value['method_modify'] && 'name' !== $key ) {
+			if ( in_array( $value['method_modify'], $structure['content_methods'] ) && 'name' !== $key ) {
 				$args[ $key ] = $value['value'];
 				unset( $params[ $key ] );
 			}
@@ -2037,8 +2068,11 @@ class Object_Sync_Sf_WordPress {
 	 *   "errors" : [ ],
 	 */
 	private function comment_create( $params, $id_field = 'comment_ID' ) {
+		// Load all params with a method_modify of the object structure's content_method into $content
+		$content = array();
+		$structure = $this->get_wordpress_table_structure( 'comment' );
 		foreach ( $params as $key => $value ) {
-			if ( 'wp_new_comment' === $value['method_modify'] ) {
+			if ( in_array( $value['method_modify'], $structure['content_methods'] ) ) {
 				$content[ $key ] = $value['value'];
 				unset( $params[ $key ] );
 			}
@@ -2358,4 +2392,91 @@ class Object_Sync_Sf_WordPress {
  * WordpressException is a placeholder class in the event that we want to modify Exception for our own purposes.
  */
 class WordpressException extends Exception {
+}
+
+/**
+ * Class to store all theme/plugin transients as an array in one WordPress transient
+ **/
+class Object_Sync_Sf_WordPress_Transient {
+
+	protected $name;
+
+	/**
+	 * Constructor which sets cache options and the name of the field that lists this plugin's cache keys.
+	 *
+	 * @param string $name The name of the field that lists all cache keys.
+	 */
+	public function __construct( $name ) {
+		$this->name = $name;
+		$this->cache_prefix = esc_sql( 'sfwp_' );
+	}
+
+	/**
+	 * Get the transient that lists all the other transients for this plugin.
+	 *
+	 * @return mixed value of transient. False of empty, otherwise array.
+	 */
+	public function all_keys() {
+		return get_transient( $this->name );
+	}
+
+	/**
+	 * Set individual transient, and add its key to the list of this plugin's transients.
+	 *
+	 * @param string $cachekey the key for this cache item
+	 * @param mixed $value the value of the cache item
+	 * @param int $cache_expiration. How long the plugin key cache, and this individual item cache, should last before expiring.
+	 * @return mixed value of transient. False of empty, otherwise array.
+	 */
+	public function set( $cachekey, $value, $cache_expiration = 0 ) {
+
+		$prefix = $this->cache_prefix;
+		$cachekey = $prefix . $cachekey;
+
+		$keys = $this->all_keys();
+		$keys[] = $cachekey;
+		set_transient( $this->name, $keys, $cache_expiration );
+
+		return set_transient( $cachekey, $value, $cache_expiration );
+	}
+
+	/**
+	 * Get the individual cache value
+	 *
+	 * @param string $cachekey the key for this cache item
+	 * @return mixed value of transient. False of empty, otherwise array.
+	 */
+	public function get( $cachekey ) {
+		$prefix = $this->cache_prefix;
+		$cachekey = $prefix . $cachekey;
+		return get_transient( $cachekey );
+	}
+
+	/**
+	 * Delete the individual cache value
+	 *
+	 * @param string $cachekey the key for this cache item
+	 * @return bool True if successful, false otherwise.
+	 */
+	public function delete( $cachekey ) {
+		$prefix = $this->cache_prefix;
+		$cachekey = $prefix . $cachekey;
+		return delete_transient( $cachekey );
+	}
+
+	/**
+	 * Delete the entire cache for this plugin
+	 *
+	 * @return bool True if successful, false otherwise.
+	 */
+	public function flush() {
+		$keys = $this->all_keys();
+		$result = true;
+		foreach ( $keys as $key ) {
+			$result = delete_transient( $key );
+		}
+		$result = delete_transient( $this->name );
+		return $result;
+	}
+
 }

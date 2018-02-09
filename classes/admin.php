@@ -95,12 +95,14 @@ class Object_Sync_Sf_Admin {
 		$this->logging = $logging;
 		$this->schedulable_classes = $schedulable_classes;
 
+		$this->sfwp_transients = $this->wordpress->sfwp_transients;
+
 		// default authorize url path
 		$this->default_authorize_url_path = '/services/oauth2/authorize';
 		// default token url path
 		$this->default_token_url_path = '/services/oauth2/token';
 		// what Salesforce API version to start the settings with. This is only used in the settings form
-		$this->default_api_version = '40.0';
+		$this->default_api_version = '42.0';
 		// default pull throttle for avoiding going over api limits
 		$this->default_pull_throttle = 5;
 		// default setting for triggerable items
@@ -128,6 +130,7 @@ class Object_Sync_Sf_Admin {
 		add_action( 'wp_ajax_push_to_salesforce', array( $this, 'push_to_salesforce' ) );
 		add_action( 'wp_ajax_pull_from_salesforce', array( $this, 'pull_from_salesforce' ) );
 		add_action( 'wp_ajax_refresh_mapped_data', array( $this, 'refresh_mapped_data' ) );
+		add_action( 'wp_ajax_clear_sfwp_cache', array( $this, 'clear_sfwp_cache' ) );
 
 		add_action( 'edit_user_profile', array( $this, 'show_salesforce_user_fields' ) );
 		add_action( 'personal_options_update', array( $this, 'save_salesforce_user_fields' ) );
@@ -209,7 +212,7 @@ class Object_Sync_Sf_Admin {
 		$pull_schedule_unit = get_option( 'object_sync_for_salesforce_salesforce_pull_schedule_unit', '' );
 
 		if ( '' === $push_schedule_number && '' === $push_schedule_unit && '' === $pull_schedule_number && '' === $pull_schedule_unit ) {
-			$url = esc_url( get_admin_url( null, 'options-general.php?page=object-sync-salesforce-admin&tab=fieldmaps' ) );
+			$url = esc_url( get_admin_url( null, 'options-general.php?page=object-sync-salesforce-admin&tab=schedule' ) );
 			$anchor = esc_html__( 'Scheduling tab', 'object-sync-for-salesforce' );
 			$message = sprintf( 'Because the plugin schedule has not been saved, the plugin cannot run automatic operations. Use the <a href="%s">%s</a> to create schedules to run.', $url, $anchor );
 			require( plugin_dir_path( __FILE__ ) . '/../templates/admin/error.php' );
@@ -249,7 +252,7 @@ class Object_Sync_Sf_Admin {
 
 						if ( isset( $get_data['transient'] ) ) {
 							$transient = sanitize_key( $get_data['transient'] );
-							$posted = get_transient( $transient );
+							$posted = $this->sfwp_transients->get( $transient );
 						}
 
 						if ( isset( $posted ) && is_array( $posted ) ) {
@@ -285,6 +288,9 @@ class Object_Sync_Sf_Admin {
 				case 'logout':
 					$this->logout();
 					break;
+				case 'clear_cache':
+					$this->clear_cache();
+					break;
 				case 'clear_schedule':
 					if ( isset( $get_data['schedule_name'] ) ) {
 						$schedule_name = sanitize_key( $get_data['schedule_name'] );
@@ -303,7 +309,7 @@ class Object_Sync_Sf_Admin {
 
 						if ( isset( $get_data['map_transient'] ) ) {
 							$transient = sanitize_key( $get_data['map_transient'] );
-							$posted = get_transient( $transient );
+							$posted = $this->sfwp_transients->get( $transient );
 						}
 
 						if ( isset( $posted ) && is_array( $posted ) ) {
@@ -529,6 +535,18 @@ class Object_Sync_Sf_Admin {
 					'type' => 'checkbox',
 					'validate' => 'sanitize_text_field',
 					'desc' => 'Debug mode can, combined with the Log Settings, log things like Salesforce API requests. It can create a lot of entries if enabled; it is not recommended to use it in a production environment.',
+					'constant' => '',
+				),
+			),
+			'delete_data_on_uninstall' => array(
+				'title' => 'Delete plugin data on uninstall?',
+				'callback' => $callbacks['text'],
+				'page' => $page,
+				'section' => $section,
+				'args' => array(
+					'type' => 'checkbox',
+					'validate' => 'sanitize_text_field',
+					'desc' => 'If checked, the plugin will delete the tables and other data it creates when you uninstall it. Unchecking this field can be useful if you need to reactivate the plugin for any reason without losing data.',
 					'constant' => '',
 				),
 			),
@@ -1147,7 +1165,7 @@ class Object_Sync_Sf_Admin {
 			$error = true;
 		}
 		if ( true === $error ) {
-			set_transient( $cachekey, $post_data, 0 );
+			$this->sfwp_transients->set( $cachekey, $post_data, $this->wordpress->options['cache_expiration'] );
 			if ( '' !== $cachekey ) {
 				$url = esc_url_raw( $post_data['redirect_url_error'] ) . '&transient=' . $cachekey;
 			}
@@ -1168,13 +1186,13 @@ class Object_Sync_Sf_Admin {
 				$result = $this->mappings->update_fieldmap( $post_data, $wordpress_fields, $salesforce_fields, $id );
 			}
 			if ( false === $result ) { // if the database didn't save, it's still an error
-				set_transient( $cachekey, $post_data, 0 );
+				$this->sfwp_transients->set( $cachekey, $post_data, $this->wordpress->options['cache_expiration'] );
 				if ( '' !== $cachekey ) {
 					$url = esc_url_raw( $post_data['redirect_url_error'] ) . '&transient=' . $cachekey;
 				}
 			} else {
 				if ( isset( $post_data['transient'] ) ) { // there was previously an error saved. can delete it now.
-					delete_transient( esc_attr( $post_data['transient'] ) );
+					$this->sfwp_transients->delete( esc_attr( $post_data['map_transient'] ) );
 				}
 				// then send the user to the list of fieldmaps
 				$url = esc_url_raw( $post_data['redirect_url_success'] );
@@ -1222,7 +1240,7 @@ class Object_Sync_Sf_Admin {
 			$error = true;
 		}
 		if ( true === $error ) {
-			set_transient( $cachekey, $post_data, 0 );
+			$this->sfwp_transients->set( $cachekey, $post_data, $this->wordpress->options['cache_expiration'] );
 			if ( '' !== $cachekey ) {
 				$url = esc_url_raw( $post_data['redirect_url_error'] ) . '&map_transient=' . $cachekey;
 			}
@@ -1234,13 +1252,13 @@ class Object_Sync_Sf_Admin {
 				$result = $this->mappings->update_object_map( $post_data, $id );
 			}
 			if ( false === $result ) { // if the database didn't save, it's still an error
-				set_transient( $cachekey, $post_data, 0 );
+				$this->sfwp_transients->set( $cachekey, $post_data, $this->wordpress->options['cache_expiration'] );
 				if ( '' !== $cachekey ) {
 					$url = esc_url_raw( $post_data['redirect_url_error'] ) . '&map_transient=' . $cachekey;
 				}
 			} else {
 				if ( isset( $post_data['map_transient'] ) ) { // there was previously an error saved. can delete it now.
-					delete_transient( esc_attr( $post_data['map_transient'] ) );
+					$this->sfwp_transients->delete( esc_attr( $post_data['map_transient'] ) );
 				}
 				// then send the user to the success redirect url
 				$url = esc_url_raw( $post_data['redirect_url_success'] );
@@ -1531,6 +1549,40 @@ class Object_Sync_Sf_Admin {
 	}
 
 	/**
+	* Ajax call to clear the plugin cache.
+	*/
+	public function clear_sfwp_cache() {
+		$result = $this->clear_cache( true );
+		$response = array(
+			'message' => $result['message'],
+			'success' => $result['success'],
+		);
+		wp_send_json_success( $response );
+	}
+
+	/**
+	* Clear the plugin's cache.
+	* This uses the flush method contained in the WordPress cache to clear all of this plugin's cached data.
+	*/
+	private function clear_cache( $ajax = false ) {
+		$result = $this->wordpress->sfwp_transients->flush();
+		if ( true === $result ) {
+			$message = 'The plugin cache has been cleared.';
+		} else {
+			$message = 'There was an error clearing the plugin cache. Try refreshing this page.';
+		}
+		if ( false === $ajax ) {
+			// translators: parameter 1 is the result message
+			echo sprintf( '<p>%1$s</p>', $message );
+		} else {
+			return array(
+				'message' => $message,
+				'success' => $result,
+			);
+		}
+	}
+
+	/**
 	* Check WordPress Admin permissions
 	* Check if the current user is allowed to access the Salesforce plugin options
 	*/
@@ -1619,7 +1671,6 @@ class Object_Sync_Sf_Admin {
 		$callback_url = $this->login_credentials['callback_url'];
 
 		$current_tab = $tab;
-		screen_icon();
 		echo '<h2 class="nav-tab-wrapper">';
 		foreach ( $tabs as $tab_key => $tab_caption ) {
 			$active = $current_tab === $tab_key ? ' nav-tab-active' : '';

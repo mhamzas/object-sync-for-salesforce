@@ -1,6 +1,52 @@
 Changelog
 =========
 
+* 1.2.6 (2018-01-30)
+	* Bug fix: in some cases, date fields coming from Salesforce were not correctly formatted for use in WordPress. This release causes any core date fields to be formatted as WordPress expects them. Thanks to GitHub user @prowp for the report on this.
+	* Note: to apply this fix, you need to clear the plugin cache, and then re-save any the fieldmap(s) that need it.
+	* This release also includes a small documentation update about restricted picklist fields.
+
+* 1.2.5 (2018-01-26)
+	* Bug fix: trying to save a high number of fields in a single fieldmap was failing. Thanks to GitHub user @prowp for the report.
+	* New: some in-page help to users who may be missing meta fields when trying to add them to a fieldmap. This happens if these meta fields are new fields without data, and thus cannot be found in the database by the plugin.
+	* New: we now store the plugin version in the database when saving a fieldmap. This allows us to check fieldmaps to make sure they use the most up to date schema.
+
+* 1.2.4 (2018-01-24)
+	* This release fixes a rare bug in which Salesforce changes that occur between a query and the completion of the pull operation would not sync to WordPress. Thanks to GitHub user @charmoney for the report and the fix.
+	* This release also removes the "weight" field from the screen that adds and edits fieldmaps. This field should have been removed in the past, as it doesn't currently do anything, although in the future we'd like to investigate the ability to map multiple WordPress objects to the same Salesforce object and sync them using the weight field.
+
+* 1.2.3 (2018-01-19)
+	* This release fixes a bug in which deleting field pairs from an existing fieldmap, saving, and then adding more field pairs could result in data not being saved. Thanks to WordPress user @pavelwld for reporting this.
+	* This release also adds a Settings tab field to choose whether or not the plugin should delete its data when it is deactivated.
+
+* 1.2.2 (2018-01-17)
+	* This release fixes a bug in which an object map could not be created if the Salesforce ID was the same, with case insensitivity, as another Salesforce ID. Salesforce, however, is case sensitive with these IDs and can occasionally create IDs like this. Thanks to WordPress user @pavelwld for reporting this.
+
+* 1.2.1 (2017-12-19)
+	* This release fixes a bug caused in 1.2.0. Users were unable to sync data without re-saving fieldmaps. This does a version checker and uses previous data structures until users re-save.
+	* Make sure you update your plugin fieldmaps.
+
+* 1.2.0 (2017-12-18)
+	* This release provides basic support for additional field types in Salesforce, including: multipicklist, picklist, date, datetime, and URL (results may vary depending on how WordPress plugins handle their custom field equivalents). Thanks to WordPress user @ilanabit for reporting this.
+	* This release also forces InnoDB on the `field_map` table because MyISAM gets errors on the index length. Hopefully most users are already on InnoDB by default, but this will help any users who are not.
+
+* 1.1.2 (2017-11-20)
+	* Clarify the documentation, and the code, for the following developer hooks:
+		* `object_sync_for_salesforce_add_more_wordpress_types`
+		* `object_sync_for_salesforce_remove_wordpress_types`
+		* `object_sync_for_salesforce_wordpress_object_data`
+	* Thanks to WordPress user @justanothercoder for asking about this, leading to the fix.
+
+* 1.1.1 (2017-11-17)
+	* This release removes the `screen_icon()` method from admin.php. It has been deprecated apparently since 3.8, but in 4.9 it officially throws PHP Notice messages in `WP_DEBUG` mode.
+
+* 1.1.0 (2017-11-10)
+	* This release gives users a way to clear the cached data for this plugin only, even if they are using an object cache method. Most importantly this resolves the problem of new fields being available in Salesforce or WordPress and not being visible in the list of mappable fields when creating or updating a fieldmap. This is partly related to GitHub user @prowp's initial report of missing metadata.
+
+* 1.0.11 (2017-11-06)
+	* Fixed a bug in which a blank `post` object was created in the event that `pull` calls were blocked, then unblocked. Thanks to GitHub user @charmoney for the report and much of the fix.
+	* Fixed a bug in which `post` meta fields were not pushed to Salesforce. Also as part of this, added basic support for WooCommerce `order` post types. Thanks to WordPress user @ratputin and GitHub user @prowp for the report.
+
 * 1.0.10 (2017-10-10)
 
 	* This avoids repeatedly queueing Salesforce objects by initializing rather than aggregating the queue before saving. This reduces memory use and database size significantly.
@@ -9,7 +55,7 @@ Changelog
 
 * 1.0.9 (2017-10-03)
 
-	* This fixes a bug in which upserting a custom post type would incorrectly create a standard post, rather than the desired custom post object.
+	* This fixes a bug in which upserting a custom post type would incorrectly create a standard post, rather than the desired custom post object. Thanks to GitHub user @prowp for the report.
 
 * 1.0.8 (2017-08-14)
 
