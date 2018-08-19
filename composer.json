@@ -26,10 +26,12 @@
         "A5hleyRich/wp-queue": "dev-master",
         "developerforce/force.com-toolkit-for-php": "^1.0@dev"
     },
-    "require-dev": {
-        "phpunit/phpunit": "4.8.*"
-    },
     "autoload": {
         "classmap": ["vendor/pippinsplugins/wp-logging/"]
+    },
+    "require-dev": {
+        "apigen/apigen": "^4.1",
+        "phpunit/phpunit": "4.8.x-dev",
+        "johnpbloch/wordpress": "dev-master"
     }
 }

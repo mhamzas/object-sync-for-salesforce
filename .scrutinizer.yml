@@ -1,0 +1,18 @@
+filter:
+    excluded_paths:
+        - 'bin/*'
+        - 'docs/*'
+        - '*.min.js'
+        - '*.min.css'
+        - tests/**/*
+        - 'Gulpfile.js'
+    dependency_paths:
+        - wordpress/
+tools:
+    php_code_sniffer:
+        config:
+            standard: WordPress
+build:
+    environment:
+      node: 'v10.0.0'
+      php: '7.1.12'

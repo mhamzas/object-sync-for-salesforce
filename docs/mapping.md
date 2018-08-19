@@ -25,7 +25,7 @@ The settings for a WordPress fieldmap work like this:
 7. Push drafts: many WordPress objects create and save drafts while editing is happening. By default, this data is not sent to Salesforce. Checking the box causes it to be synced equally to live items.
 8. Weight: if the same object is mapped multiple times, the weight will determine what happens first. This is in ascending order, so objects with higher numerical values will be mapped after objects with lower numerical values.
 
-Several hooks exist for modifying these options. See the [extending mapping options documentation](./extending-mapping-options.md).
+Several hooks exist for modifying these options, including whether a combo search/dropdown field library is used. See the [extending mapping options documentation](./extending-mapping-options.md).
 
 ### More on WordPress object
 
@@ -35,7 +35,7 @@ The plugin also has hooks to modify what objects are included. You can read more
 
 ### More on Salesforce object
 
-What is contained in this list depends partly on the authenticated Salesforce user's permissions, and partly on what the plugin's settings do with objects that can't be triggered and/or updated (see the [setup documentation](./setup.md) for more. This list is not currently able to be modified by developer hooks.
+What is contained in this list depends partly on the authenticated Salesforce user's permissions, and partly on what the plugin's settings do with objects that can't be triggered and/or updated (see the [setup documentation](./initial-setup.md) for more. This list is not currently able to be modified by developer hooks.
 
 The date fields to trigger a pull request are how the plugin finds Salesforce records in mapped objects that have been updated since the last `wp_cron` run. For example, if you map WordPress users to Salesforce Contacts, this date field will allow the plugin to get all Contacts that have been updated since that last run.
 
@@ -47,7 +47,13 @@ The date fields to trigger a pull request are how the plugin finds Salesforce re
 
 WordPress does not currently have a way to get all fields from an object. This plugin attempts to do this by combining the fields from an object's main table (`wp_posts`, `wp_users`, etc.) with the metadata for that object (`wp_postmeta`, `wp_usermeta`, etc.). This isn't perfect, but it gets most fields.
 
-**Note:** these fields will not show up in the list until they have values. This is because they aren't placed into the meta tables until they have values.
+This gets most fields because WordPress stores metadata as key/value pairs in its database. Many plugins and themes use this method to store custom field data. Object Sync for Salesforce supports mapping these fields (many other plugins use non-standard methods, and this plugin may or may not support them).
+
+There's a [helpful spreadsheet](https://docs.google.com/spreadsheets/d/1mSqienVYxLopTFGLPK0lGCJst2knKzXDtLQRgwjeBN8/edit#gid=3) (we are not affiliated with it, we just think it's useful) comparing various options for custom fields you can review. If the plugin you wish to use uses Meta-based Storage (listed in the spreadsheet), you should be able to use it with Object Sync for Salesforce, but how well they work together will vary. Plugins with full meta compatibility (also listed in the spreadsheet) may work the best, but you don't have to restrict yourself to those.
+
+**Note:** this plugin cannot see meta fields before the field has at least one value in the database. For example, if you have a "testfield" on your user object, it won’t be in the fieldmap options until there is at least one user that has a value for the field.
+
+If you load this plugin and then store data for a new meta field after this load, make sure you click the "Clear the plugin cache" link on the Fieldmaps tab.
 
 The plugin also has a hook to modify what fields are included for an object. You can read more about this in the [extending mapping options documentation](./extending-mapping-options.md#available-wordpress-fields).
 
@@ -83,9 +89,9 @@ If you encounter this issue, first try these steps in Salesforce:
 
 Prematch determines whether the field should be used to match objects. If it is checked, the plugin will see objects that share a value in that pair to be matched.
 
-A Salesforce Key is a flag in Salesforce that determines whether a field is another system's external ID.
+A Salesforce Key is a flag in Salesforce that determines whether a field is another system's external ID. Salesforce uses this to keep data from being overwritten.
 
-A checked Prematch or Salesforce Key will cause the plugin to try to "upsert" the data, which checks to see if there is a match before creating a new record. You can expand how upserting works with several hooks, which are [documented](./extending-upsert.md).
+A checked Prematch (when saving data in WordPress or Salesforce) or Salesforce Key (when saving data in Salesforce) will cause the plugin to try to "upsert" the data to its destination. This means it checks to see if there is a match before creating a new record. You can expand how upserting works with several hooks, which are [documented](./extending-upsert.md).
 
 Direction chooses what to do with the field's data. If you select Salesforce to WordPress, this field won't be sent to Salesforce. If you select WordPress to Salesforce, this field won't be sent to Wordpress. If you choose Sync, it will go from one system to the other whenever it changes.
 
@@ -105,7 +111,7 @@ Individual object map rows - a WordPress user to a Salesforce Contact, for examp
 
     When a WordPress object type that is already mapped to a Salesforce object type has an event that is an active trigger (as defined above).
 
-    - Create: if a new WordPress item is created, it will attempt to `insert` or `upsert` it into Salesforce. Upsert is used with the Prematch field defined above. You can expand how upserting works with several hooks, which are [documented](./extending-upsert.md).
+    - Create: if a new WordPress item is created, it will attempt to `insert` or `upsert` it into Salesforce. Upsert is used with the Prematch and Salesforce Key fields defined above. You can expand how upserting works with several hooks, which are [documented](./extending-upsert.md).
     - Update: if there is already an object map between two objects, the plugin will attempt to update the out of date item.
     - Delete: if there is already an object map between two objects, the plugin will attempt to delete the remaining item.
 
@@ -113,7 +119,7 @@ Individual object map rows - a WordPress user to a Salesforce Contact, for examp
 
     When a Salesforce object type that is already mapped to a WordPress object type has an event that is an active trigger (as defined above).
 
-    - Create: if a new Salesforce item is created, it will attempt to `insert` or `upsert` it into WordPress. Upsert is used with the Prematch field defined above. You can expand how upserting works with several hooks, which are [documented](./extending-upsert.md).
+    - Create: if a new Salesforce item is created, it will attempt to `insert` or `upsert` it into WordPress. Upsert is used with the Prematch field defined above (the Salesforce Key field is ignored on pull operations). You can expand how upserting works with several hooks, which are [documented](./extending-upsert.md).
     - Update: if there is already an object map between two objects, the plugin will attempt to update the out of date item.
     - Delete: if there is already an object map between two objects, the plugin will attempt to delete the remaining item.
 
