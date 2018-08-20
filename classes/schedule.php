@@ -53,10 +53,9 @@ class Object_Sync_Sf_Schedule extends Job {
 		$this->logging             = $logging;
 		$this->schedulable_classes = $schedulable_classes;
 
-		$this->identifier = $this->schedule_name;
+		//$this->identifier = $this->schedule_name;
 
-		$this->add_filters();
-		add_action( $this->schedule_name, array( $this, 'maybe_handle' ) ); // run the handle method
+		//add_action( $this->schedule_name, array( $this, 'maybe_handle' ) ); // run the handle method
 
 	}
 
@@ -64,8 +63,8 @@ class Object_Sync_Sf_Schedule extends Job {
 	* Create the filters we need to run
 	*
 	*/
-	public function add_filters() {
-		add_filter( 'cron_schedules', array( $this, 'set_schedule_frequency' ) );
+	public function add_actions() {
+		//add_filter( 'cron_schedules', array( $this, 'set_schedule_frequency' ) );
 	}
 
 	/**

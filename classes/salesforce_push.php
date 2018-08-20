@@ -101,6 +101,9 @@ class Object_Sync_Sf_Salesforce_Push {
 				}
 			}
 		}
+		$attempts = apply_filters( 'ipq_job_attempts', 3 );
+		$interval = apply_filters( 'ipq_cron_interval', 1 );
+		wp_queue()->cron( $attempts, $interval );
 	}
 
 	/**
@@ -444,9 +447,10 @@ class Object_Sync_Sf_Salesforce_Push {
 
 					// create new schedule based on the options for this current class
 					// this will use the existing schedule if it already exists; otherwise it'll create one
-					$this->schedule->use_schedule( $this->schedule_name );
-					$this->schedule->push_to_queue( $data );
-					$this->schedule->save()->dispatch();
+					//$this->schedule->use_schedule( $this->schedule_name );
+					//$this->schedule->push_to_queue( $data );
+					//$this->schedule->save()->dispatch();
+					wp_queue()->push( new Object_Sync_Sf_Queue_Job( $this->schedule_name ) );
 
 				} else {
 					// this one is not async. do it immediately.
