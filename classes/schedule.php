@@ -14,7 +14,7 @@ use WP_Queue\Job;
 /**
  * Schedule events in a queue in WordPress
  */
-class Object_Sync_Sf_Schedule extends Job {
+class Object_Sync_Sf_Schedule {
 
 	protected $wpdb;
 	protected $version;

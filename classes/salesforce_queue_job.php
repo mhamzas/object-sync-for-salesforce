@@ -1,55 +1,95 @@
 <?php
-/**
- * Class file for the Object_Sync_Sf_Queue_Job class. Extend the WP_Queue\Job class for the purposes of Object Sync for Salesforce.
- *
- * @file
- */
-
-if ( ! class_exists( 'Object_Sync_Salesforce' ) ) {
-	die();
-}
 
 use WP_Queue\Job;
 
-/**
- * Schedule events
- */
-class Object_Sync_Sf_Queue_Job extends Job {
-
-	/**
-	 * @var string
-	 */
-	public $schedule_name;
+class Salesforce_Queue_Job extends Job {
 
 	/**
 	 * @var array
 	 */
-	public $schedulable_classes;
+	public $data;
 
 	/**
-	 * Object_Sync_Sf_Queue_Job constructor.
-	 *
-	 * @param string $schedule_name
-	 * @param array $schedulable_classes
+	 * @var string
 	 */
-	public function __construct( $schedule_name, $schedulable_classes ) {
-		$this->schedule_name       = $schedule_name;
-		$this->schedulable_classes = $schedulable_classes;
+	public $direction;
+
+	/**
+	 * Salesforce_Queue_Job constructor.
+	 */
+	public function __construct( $data, $direction ) {
+		$this->data      = $data;
+		$this->direction = $direction;
 	}
 
 	/**
 	 * Handle job logic.
 	 */
 	public function handle() {
-		if ( is_array( $this->schedulable_classes[ $this->schedule_name ] ) ) {
-			$schedule = $this->schedulable_classes[ $this->schedule_name ];
-			if ( isset( $schedule['class'] ) ) {
-				$class  = new $schedule['class']( $this->wpdb, $this->version, $this->login_credentials, $this->slug, $this->wordpress, $this->salesforce, $this->mappings, $this->logging, $this->schedulable_classes );
-				$method = $schedule['callback'];
-				$task   = $class->$method( $data['object_type'], $data['object'], $data['mapping'], $data['sf_sync_trigger'] );
-			}
-		}
-		return false;
+
+		error_log( 'data is ' . print_r( $this->data, true ) . ' and direction is ' . $this->direction );
+
+        /*$item = wp_parse_args( $this->data, array(
+            'post_id' => 0,
+            'width'   => 0,
+            'height'  => 0,
+            'crop'    => false,
+        ) );
+
+        $post_id = $item['post_id'];
+        $width   = $item['width'];
+        $height  = $item['height'];
+        $crop    = $item['crop'];
+
+        if ( ! $width && ! $height ) {
+            throw new Exception( "Invalid dimensions '{$width}x{$height}'" );
+        }
+
+        if ( Queue::does_size_already_exist_for_image( $post_id, array( $width, $height, $crop ) ) ) {
+            return false;
+        }
+
+        $image_meta = Queue::get_image_meta( $post_id );
+
+        if ( ! $image_meta ) {
+            return false;
+        }*/
+
+        add_filter( 'as3cf_get_attached_file_copy_back_to_local', '__return_true' );
+        $img_path = Queue::get_image_path( $post_id );
+
+        if ( ! $img_path ) {
+            return false;
+        }
+
+        $editor = wp_get_image_editor( $img_path );
+
+        if ( is_wp_error( $editor ) ) {
+            throw new Exception( 'Unable to get WP_Image_Editor for file "' . $img_path . '": ' . $editor->get_error_message() . ' (is GD or ImageMagick installed?)' );
+        }
+
+        $resize = $editor->resize( $width, $height, $crop );
+
+        if ( is_wp_error( $resize ) ) {
+            throw new Exception( 'Error resizing image: ' . $resize->get_error_message() );
+        }
+
+        $resized_file = $editor->save();
+
+        if ( is_wp_error( $resized_file ) ) {
+            throw new Exception( 'Unable to save resized image file: ' . $editor->get_error_message() );
+        }
+
+        $size_name = Queue::get_size_name( array( $width, $height, $crop ) );
+        $image_meta['sizes'][ $size_name ] = array(
+            'file'      => $resized_file['file'],
+            'width'     => $resized_file['width'],
+            'height'    => $resized_file['height'],
+            'mime-type' => $resized_file['mime-type'],
+        );
+
+        unset( $image_meta['ipq_locked'] );
+        wp_update_attachment_metadata( $post_id, $image_meta );
 	}
 
 }
