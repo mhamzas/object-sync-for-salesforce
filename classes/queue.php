@@ -123,6 +123,35 @@ class Object_Sync_Sf_Queue {
 
 	}
 
+	/**
+	* Convert the schedule frequency from the admin settings into seconds
+	*
+	*/
+	public function get_schedule_frequency_seconds( $name = '' ) {
+
+		$schedule_number = get_option( 'object_sync_for_salesforce_' . $name . '_schedule_number', '' );
+		$schedule_unit   = get_option( 'object_sync_for_salesforce_' . $name . '_schedule_unit', '' );
+
+		switch ( $schedule_unit ) {
+			case 'minutes':
+				$seconds = 60;
+				break;
+			case 'hours':
+				$seconds = 3600;
+				break;
+			case 'days':
+				$seconds = 86400;
+				break;
+			default:
+				$seconds = 0;
+		}
+
+		$total = $seconds * $schedule_number;
+
+		return $total;
+
+	}
+
 	public function save_to_queue( $data, $direction ) {
 		wp_queue()->push( new Salesforce_Queue_Job( $data, $direction ) );
 	}
