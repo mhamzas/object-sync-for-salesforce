@@ -290,7 +290,7 @@ class Object_Sync_Sf_Salesforce {
 			if ( isset( $this->logging ) ) {
 				$logging = $this->logging;
 			} elseif ( class_exists( 'Object_Sync_Sf_Logging' ) ) {
-				$logging = new Object_Sync_Sf_Logging( $wpdb, $this->version );
+				$logging = new Object_Sync_Sf_Logging( $this->version );
 			}
 
 			// translators: placeholder is the URL of the Salesforce API request
@@ -385,7 +385,7 @@ class Object_Sync_Sf_Salesforce {
 				if ( isset( $this->logging ) ) {
 					$logging = $this->logging;
 				} elseif ( class_exists( 'Object_Sync_Sf_Logging' ) ) {
-					$logging = new Object_Sync_Sf_Logging( $wpdb, $this->version );
+					$logging = new Object_Sync_Sf_Logging( $this->version );
 				}
 
 				// translators: placeholder is the URL of the Salesforce API request
@@ -406,7 +406,7 @@ class Object_Sync_Sf_Salesforce {
 				if ( isset( $this->logging ) ) {
 					$logging = $this->logging;
 				} elseif ( class_exists( 'Object_Sync_Sf_Logging' ) ) {
-					$logging = new Object_Sync_Sf_Logging( $wpdb, $this->version );
+					$logging = new Object_Sync_Sf_Logging( $this->version );
 				}
 
 				// translators: placeholder is the server code returned by the api
@@ -434,7 +434,7 @@ class Object_Sync_Sf_Salesforce {
 				if ( isset( $this->logging ) ) {
 					$logging = $this->logging;
 				} elseif ( class_exists( 'Object_Sync_Sf_Logging' ) ) {
-					$logging = new Object_Sync_Sf_Logging( $wpdb, $this->version );
+					$logging = new Object_Sync_Sf_Logging( $this->version );
 				}
 
 				// translators: placeholder is the server code returned by Salesforce

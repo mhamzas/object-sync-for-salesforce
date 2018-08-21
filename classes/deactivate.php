@@ -14,19 +14,16 @@ if ( ! class_exists( 'Object_Sync_Salesforce' ) ) {
  */
 class Object_Sync_Sf_Deactivate {
 
-	protected $wpdb;
 	protected $version;
 
 	/**
 	* Constructor which sets up deactivate hooks
-	* @param object $wpdb
 	* @param string $version
 	* @param string $slug
 	* @param array $schedulable_classes
 	*
 	*/
-	public function __construct( $wpdb, $version, $slug, $schedulable_classes ) {
-		$this->wpdb                = $wpdb;
+	public function __construct( $version, $slug, $schedulable_classes ) {
 		$this->version             = $version;
 		$this->schedulable_classes = $schedulable_classes;
 		$delete_data               = (int) get_option( 'object_sync_for_salesforce_delete_data_on_uninstall', 0 );
@@ -48,10 +45,11 @@ class Object_Sync_Sf_Deactivate {
 	*
 	*/
 	public function wordpress_salesforce_drop_tables() {
-		$field_map_table  = $this->wpdb->prefix . 'object_sync_sf_field_map';
-		$object_map_table = $this->wpdb->prefix . 'object_sync_sf_object_map';
-		$this->wpdb->query( 'DROP TABLE IF EXISTS ' . $field_map_table );
-		$this->wpdb->query( 'DROP TABLE IF EXISTS ' . $object_map_table );
+		global $wpdb;
+		$field_map_table  = $wpdb->prefix . 'object_sync_sf_field_map';
+		$object_map_table = $wpdb->prefix . 'object_sync_sf_object_map';
+		$wpdb->query( 'DROP TABLE IF EXISTS ' . $field_map_table );
+		$wpdb->query( 'DROP TABLE IF EXISTS ' . $object_map_table );
 		delete_option( 'object_sync_for_salesforce_db_version' );
 	}
 
@@ -61,10 +59,11 @@ class Object_Sync_Sf_Deactivate {
 	*
 	*/
 	public function wp_queue_drop_tables() {
-		$queue_jobs_table = $this->wpdb->prefix . 'queue_jobs';
-		$queue_failures_table = $this->wpdb->prefix . 'queue_failures';
-		$this->wpdb->query( 'DROP TABLE IF EXISTS ' . $queue_jobs_table );
-		$this->wpdb->query( 'DROP TABLE IF EXISTS ' . $queue_failures_table );
+		global $wpdb;
+		$queue_jobs_table     = $wpdb->prefix . 'queue_jobs';
+		$queue_failures_table = $wpdb->prefix . 'queue_failures';
+		$wpdb->query( 'DROP TABLE IF EXISTS ' . $queue_jobs_table );
+		$wpdb->query( 'DROP TABLE IF EXISTS ' . $queue_failures_table );
 	}
 
 	/**
@@ -125,8 +124,9 @@ class Object_Sync_Sf_Deactivate {
 	*
 	*/
 	public function delete_plugin_options() {
-		$table          = $this->wpdb->prefix . 'options';
-		$plugin_options = $this->wpdb->get_results( 'SELECT option_name FROM ' . $table . ' WHERE option_name LIKE "object_sync_for_salesforce_%"', ARRAY_A );
+		global $wpdb;
+		$table          = $wpdb->prefix . 'options';
+		$plugin_options = $wpdb->get_results( 'SELECT option_name FROM ' . $table . ' WHERE option_name LIKE "object_sync_for_salesforce_%"', ARRAY_A );
 		foreach ( $plugin_options as $option ) {
 			delete_option( $option['option_name'] );
 		}

@@ -18,7 +18,6 @@ class Object_Sync_Sf_Queue {
 	 */
 	protected static $instance = null;
 
-	protected $wpdb;
 	protected $version;
 	protected $slug;
 	protected $schedulable_classes;
@@ -41,9 +40,8 @@ class Object_Sync_Sf_Queue {
 	/**
 	 * Queue constructor.
 	 */
-	public function __construct( $wpdb, $version, $slug, $schedulable_classes ) {
+	public function __construct( $version, $slug, $schedulable_classes ) {
 		//add_filter( 'update_post_metadata', array( $this, 'filter_update_post_metadata' ), 10, 5 );
-		$this->wpdb                = $wpdb;
 		$this->version             = $version;
 		$this->slug                = $slug;
 		$this->schedulable_classes = $schedulable_classes;
@@ -152,8 +150,8 @@ class Object_Sync_Sf_Queue {
 
 	}
 
-	public function save_to_queue( $data, $direction ) {
-		wp_queue()->push( new Salesforce_Queue_Job( $data, $direction ) );
+	public function save_to_queue( $data, $job_processor ) {
+		wp_queue()->push( new Salesforce_Queue_Job( $data, $job_processor ) );
 	}
 
 	/**

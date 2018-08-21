@@ -14,10 +14,10 @@ if ( ! class_exists( 'Object_Sync_Salesforce' ) ) {
  */
 class Object_Sync_Sf_Salesforce_Push {
 
-	protected $wpdb;
 	protected $version;
 	protected $login_credentials;
 	protected $slug;
+	protected $wordpress;
 	protected $salesforce;
 	protected $mappings;
 	protected $logging;
@@ -32,7 +32,6 @@ class Object_Sync_Sf_Salesforce_Push {
 	/**
 	* Constructor which sets up push schedule
 	*
-	* @param object $wpdb
 	* @param string $version
 	* @param array $login_credentials
 	* @param string $slug
@@ -44,8 +43,7 @@ class Object_Sync_Sf_Salesforce_Push {
 	* @param object $queue
 	* @throws \Object_Sync_Sf_Exception
 	*/
-	public function __construct( $wpdb, $version, $login_credentials, $slug, $wordpress, $salesforce, $mappings, $logging, $schedulable_classes, $queue ) {
-		$this->wpdb                = $wpdb;
+	public function __construct( $version, $login_credentials, $slug, $wordpress, $salesforce, $mappings, $logging, $schedulable_classes, $queue ) {
 		$this->version             = $version;
 		$this->login_credentials   = $login_credentials;
 		$this->slug                = $slug;
@@ -381,7 +379,7 @@ class Object_Sync_Sf_Salesforce_Push {
 			if ( isset( $this->logging ) ) {
 				$logging = $this->logging;
 			} elseif ( class_exists( 'Object_Sync_Sf_Logging' ) ) {
-				$logging = new Object_Sync_Sf_Logging( $this->wpdb, $this->version );
+				$logging = new Object_Sync_Sf_Logging( $this->version );
 			}
 
 			// translators: placeholder is the name of the WordPress id field
@@ -527,7 +525,7 @@ class Object_Sync_Sf_Salesforce_Push {
 						if ( isset( $this->logging ) ) {
 							$logging = $this->logging;
 						} elseif ( class_exists( 'Object_Sync_Sf_Logging' ) ) {
-							$logging = new Object_Sync_Sf_Logging( $this->wpdb, $this->version );
+							$logging = new Object_Sync_Sf_Logging( $this->version );
 						}
 
 						// translators: placeholders are: 1) what operation is happening, 2) the name of the Salesforce object, 3) the Salesforce Id value, 4) the name of the WordPress object type, 5) the WordPress id field name, 6) the WordPress object id value
@@ -559,7 +557,7 @@ class Object_Sync_Sf_Salesforce_Push {
 						if ( isset( $this->logging ) ) {
 							$logging = $this->logging;
 						} elseif ( class_exists( 'Object_Sync_Sf_Logging' ) ) {
-							$logging = new Object_Sync_Sf_Logging( $this->wpdb, $this->version );
+							$logging = new Object_Sync_Sf_Logging( $this->version );
 						}
 
 						// translators: placeholders are: 1) what operation is happening, 2) the name of the Salesforce object, 3) the Salesforce Id value, 4) the name of the WordPress object type, 5) the WordPress id field name, 6) the WordPress object id value
@@ -602,7 +600,7 @@ class Object_Sync_Sf_Salesforce_Push {
 					if ( isset( $this->logging ) ) {
 						$logging = $this->logging;
 					} elseif ( class_exists( 'Object_Sync_Sf_Logging' ) ) {
-						$logging = new Object_Sync_Sf_Logging( $this->wpdb, $this->version );
+						$logging = new Object_Sync_Sf_Logging( $this->version );
 					}
 
 					// translators: placeholders are: 1) what operation is happening, 2) the name of the Salesforce object, 3) the Salesforce Id value, 4) the name of the WordPress object type, 5) the WordPress id field name, 6) the WordPress object id value
@@ -773,7 +771,7 @@ class Object_Sync_Sf_Salesforce_Push {
 				if ( isset( $this->logging ) ) {
 					$logging = $this->logging;
 				} elseif ( class_exists( 'Object_Sync_Sf_Logging' ) ) {
-					$logging = new Object_Sync_Sf_Logging( $this->wpdb, $this->version );
+					$logging = new Object_Sync_Sf_Logging( $this->version );
 				}
 
 				// translators: placeholders are: 1) what operation is happening, 2) the name of the Salesforce object, 3) the Salesforce Id value if there is one, 4) the name of the WordPress object type, 5) the WordPress id field name, 6) the WordPress object id value
@@ -816,7 +814,7 @@ class Object_Sync_Sf_Salesforce_Push {
 				if ( isset( $this->logging ) ) {
 					$logging = $this->logging;
 				} elseif ( class_exists( 'Object_Sync_Sf_Logging' ) ) {
-					$logging = new Object_Sync_Sf_Logging( $this->wpdb, $this->version );
+					$logging = new Object_Sync_Sf_Logging( $this->version );
 				}
 
 				// translators: placeholders are: 1) what operation is happening, 2) the name of the Salesforce object, 3) the Salesforce Id value, 4) the name of the WordPress object type, 5) the WordPress id field name, 6) the WordPress object id value
@@ -853,7 +851,7 @@ class Object_Sync_Sf_Salesforce_Push {
 				if ( isset( $this->logging ) ) {
 					$logging = $this->logging;
 				} elseif ( class_exists( 'Object_Sync_Sf_Logging' ) ) {
-					$logging = new Object_Sync_Sf_Logging( $this->wpdb, $this->version );
+					$logging = new Object_Sync_Sf_Logging( $this->version );
 				}
 
 				// translators: placeholders are: 1) error code the Salesforce API returned, 2) what operation is happening, 3) the name of the WordPress object type, 4) the WordPress id field name, 5) the WordPress object id value
@@ -900,7 +898,7 @@ class Object_Sync_Sf_Salesforce_Push {
 				if ( isset( $this->logging ) ) {
 					$logging = $this->logging;
 				} elseif ( class_exists( 'Object_Sync_Sf_Logging' ) ) {
-					$logging = new Object_Sync_Sf_Logging( $this->wpdb, $this->version );
+					$logging = new Object_Sync_Sf_Logging( $this->version );
 				}
 
 				// translators: placeholders are: 1) what operation is happening, 2) the name of the WordPress object type, 3) the WordPress id field name, 4) the WordPress object id value, 5) the Salesforce Id value
@@ -950,7 +948,7 @@ class Object_Sync_Sf_Salesforce_Push {
 				if ( isset( $this->logging ) ) {
 					$logging = $this->logging;
 				} elseif ( class_exists( 'Object_Sync_Sf_Logging' ) ) {
-					$logging = new Object_Sync_Sf_Logging( $this->wpdb, $this->version );
+					$logging = new Object_Sync_Sf_Logging( $this->version );
 				}
 
 				// translators: placeholders are: 1) what operation is happening, 2) the name of the Salesforce object, 3) the Salesforce Id value, 4) the name of the WordPress object type, 5) the WordPress id field name, 6) the WordPress object id value
@@ -980,7 +978,7 @@ class Object_Sync_Sf_Salesforce_Push {
 				if ( isset( $this->logging ) ) {
 					$logging = $this->logging;
 				} elseif ( class_exists( 'Object_Sync_Sf_Logging' ) ) {
-					$logging = new Object_Sync_Sf_Logging( $this->wpdb, $this->version );
+					$logging = new Object_Sync_Sf_Logging( $this->version );
 				}
 
 				// translators: placeholders are: 1) what operation is happening, 2) the name of the Salesforce object, 3) the Salesforce Id value, 4) the name of the WordPress object type, 5) the WordPress id field name, 6) the WordPress object id value

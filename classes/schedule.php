@@ -16,7 +16,6 @@ use WP_Queue\Job;
  */
 class Object_Sync_Sf_Schedule {
 
-	protected $wpdb;
 	protected $version;
 	protected $login_credentials;
 	protected $slug;
@@ -29,7 +28,6 @@ class Object_Sync_Sf_Schedule {
 	/**
 	* Constructor which sets up schedule and handler for when schedule runs
 	*
-	* @param object $wpdb
 	* @param string $version
 	* @param array $login_credentials
 	* @param string $slug
@@ -40,9 +38,8 @@ class Object_Sync_Sf_Schedule {
 	* @throws \Exception
 	*/
 
-	public function __construct( $wpdb, $version, $login_credentials, $slug, $wordpress, $salesforce, $mappings, $schedule_name, $logging, $schedulable_classes ) {
+	public function __construct( $version, $login_credentials, $slug, $wordpress, $salesforce, $mappings, $schedule_name, $logging, $schedulable_classes ) {
 
-		$this->wpdb                = $wpdb;
 		$this->version             = $version;
 		$this->login_credentials   = $login_credentials;
 		$this->slug                = $slug;
@@ -213,7 +210,7 @@ class Object_Sync_Sf_Schedule {
 		if ( is_array( $this->schedulable_classes[ $this->schedule_name ] ) ) {
 			$schedule = $this->schedulable_classes[ $this->schedule_name ];
 			if ( isset( $schedule['class'] ) ) {
-				$class  = new $schedule['class']( $this->wpdb, $this->version, $this->login_credentials, $this->slug, $this->wordpress, $this->salesforce, $this->mappings, $this->logging, $this->schedulable_classes );
+				$class  = new $schedule['class']( $this->version, $this->login_credentials, $this->slug, $this->wordpress, $this->salesforce, $this->mappings, $this->logging, $this->schedulable_classes );
 				$method = $schedule['callback'];
 				$task   = $class->$method( $data['object_type'], $data['object'], $data['mapping'], $data['sf_sync_trigger'] );
 			}
@@ -234,7 +231,7 @@ class Object_Sync_Sf_Schedule {
 		if ( is_array( $this->schedulable_classes[ $this->schedule_name ] ) ) {
 			$schedule = $this->schedulable_classes[ $this->schedule_name ];
 			if ( isset( $schedule['class'] ) ) {
-				$class  = new $schedule['class']( $this->wpdb, $this->version, $this->login_credentials, $this->slug, $this->wordpress, $this->salesforce, $this->mappings, $this->logging, $this->schedulable_classes );
+				$class  = new $schedule['class']( $this->version, $this->login_credentials, $this->slug, $this->wordpress, $this->salesforce, $this->mappings, $this->logging, $this->schedulable_classes );
 				$method = $schedule['initializer'];
 				$task   = $class->$method();
 			}
@@ -304,7 +301,7 @@ class Object_Sync_Sf_Schedule {
 	 * @return bool
 	 */
 	public function count_queue_items( $schedule_name = '' ) {
-		$wpdb = $this->wpdb;
+		global $wpdb;
 
 		$table  = $wpdb->options;
 		$column = 'option_name';

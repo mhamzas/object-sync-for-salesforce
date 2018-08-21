@@ -16,12 +16,6 @@ Text Domain: object-sync-for-salesforce
 class Object_Sync_Salesforce {
 
 	/**
-	* @var object
-	* Global object of `$wpdb`, the WordPress database
-	*/
-	private $wpdb;
-
-	/**
 	* @var array
 	* Login credentials for the Salesforce API; comes from wp-config or from the plugin settings
 	*/
@@ -118,9 +112,6 @@ class Object_Sync_Salesforce {
 	 */
 	protected function __construct() {
 
-		global $wpdb;
-
-		$this->wpdb              = $wpdb;
 		$this->version           = '1.3.9';
 		$this->login_credentials = $this->get_login_credentials();
 		$this->slug              = 'object-sync-for-salesforce';
@@ -169,30 +160,29 @@ class Object_Sync_Salesforce {
 		 * }
 		*/
 
-		$this->activated = $this->activate( $this->wpdb, $this->version, $this->slug );
-		$this->deactivate( $this->wpdb, $this->version, $this->slug, $this->schedulable_classes );
+		$this->activated = $this->activate( $this->version, $this->slug );
+		$this->deactivate( $this->version, $this->slug, $this->schedulable_classes );
 
-		$this->queue = $this->queue( $this->wpdb, $this->version, $this->slug, $this->schedulable_classes );
+		$this->queue = $this->queue( $this->version, $this->slug, $this->schedulable_classes );
 
-		$this->logging = $this->logging( $this->wpdb, $this->version );
+		$this->logging = $this->logging( $this->version );
 
-		$this->mappings = $this->mappings( $this->wpdb, $this->version, $this->slug, $this->logging );
+		$this->mappings = $this->mappings( $this->version, $this->slug, $this->logging );
 
-		$this->wordpress  = $this->wordpress( $this->wpdb, $this->version, $this->slug, $this->mappings, $this->logging );
+		$this->wordpress  = $this->wordpress( $this->version, $this->slug, $this->mappings, $this->logging );
 		$this->salesforce = $this->salesforce_get_api();
 
-		$this->push = $this->push( $this->wpdb, $this->version, $this->login_credentials, $this->slug, $this->wordpress, $this->salesforce, $this->mappings, $this->logging, $this->schedulable_classes, $this->queue );
+		$this->push = $this->push( $this->version, $this->login_credentials, $this->slug, $this->wordpress, $this->salesforce, $this->mappings, $this->logging, $this->schedulable_classes, $this->queue );
 
-		$this->pull = $this->pull( $this->wpdb, $this->version, $this->login_credentials, $this->slug, $this->wordpress, $this->salesforce, $this->mappings, $this->logging, $this->schedulable_classes, $this->queue );
+		$this->pull = $this->pull( $this->version, $this->login_credentials, $this->slug, $this->wordpress, $this->salesforce, $this->mappings, $this->logging, $this->schedulable_classes, $this->queue );
 
-		$this->load_admin( $this->wpdb, $this->version, $this->login_credentials, $this->slug, $this->wordpress, $this->salesforce, $this->mappings, $this->push, $this->pull, $this->logging, $this->schedulable_classes, $this->queue );
+		$this->load_admin( $this->version, $this->login_credentials, $this->slug, $this->wordpress, $this->salesforce, $this->mappings, $this->push, $this->pull, $this->logging, $this->schedulable_classes, $this->queue );
 
 	}
 
 	/**
 	 * Queue
 	 *
-	 * @param object $wpdb
 	 * @param string $version
 	 * @param string $slug
 	 * @param array $schedulable_classes
@@ -200,37 +190,35 @@ class Object_Sync_Salesforce {
 	 * @return object
 	 *   Instance of Object_Sync_Sf_Queue
 	 */
-	private function queue( $wpdb, $version, $slug, $schedulable_classes ) {
+	private function queue( $version, $slug, $schedulable_classes ) {
 		if ( ! class_exists( 'Object_Sync_Sf_Queue' ) && file_exists( plugin_dir_path( __FILE__ ) . 'vendor/autoload.php' ) ) {
 			require_once( plugin_dir_path( __FILE__ ) . 'classes/queue.php' );
 		}
-		$queue = new Object_Sync_Sf_Queue( $wpdb, $version, $slug, $schedulable_classes );
+		$queue = new Object_Sync_Sf_Queue( $version, $slug, $schedulable_classes );
 		return $queue;
 	}
 
 	/**
 	 * Log events
 	 *
-	 * @param object $wpdb
 	 * @param string $version
 	 * @param string $slug
 	 *
 	 * @return object
 	 *   Instance of Object_Sync_Sf_Logging
 	 */
-	private function logging( $wpdb, $version ) {
+	private function logging( $version ) {
 		if ( ! class_exists( 'Object_Sync_Sf__Logging' ) && file_exists( plugin_dir_path( __FILE__ ) . 'vendor/autoload.php' ) ) {
 			require_once plugin_dir_path( __FILE__ ) . 'vendor/autoload.php';
 			require_once plugin_dir_path( __FILE__ ) . 'classes/logging.php';
 		}
-		$logging = new Object_Sync_Sf_Logging( $wpdb, $version );
+		$logging = new Object_Sync_Sf_Logging( $version );
 		return $logging;
 	}
 
 	/**
 	 * Map the Salesforce and WordPress objects and fields to each other
 	 *
-	 * @param object $wpdb
 	 * @param string $version
 	 * @param string $slug
 	 * @param object $logging
@@ -238,16 +226,15 @@ class Object_Sync_Salesforce {
 	 * @return object
 	 *   Instance of Object_Sync_Sf_Mapping
 	 */
-	private function mappings( $wpdb, $version, $slug, $logging ) {
+	private function mappings( $version, $slug, $logging ) {
 		require_once( plugin_dir_path( __FILE__ ) . 'classes/salesforce_mapping.php' );
-		$mappings = new Object_Sync_Sf_Mapping( $wpdb, $version, $slug, $logging );
+		$mappings = new Object_Sync_Sf_Mapping( $version, $slug, $logging );
 		return $mappings;
 	}
 
 	/**
 	* Private helper to load methods for manipulating core WordPress data across the plugin
 	*
-	* @param object $wpdb
 	* @param string $version
 	* @param string $slug
 	* @param object $mappings
@@ -256,9 +243,9 @@ class Object_Sync_Salesforce {
 	* @return object
 	*   Instance of Object_Sync_Sf_WordPress
 	*/
-	private function wordpress( $wpdb, $version, $slug, $mappings, $logging ) {
+	private function wordpress( $version, $slug, $mappings, $logging ) {
 		require_once plugin_dir_path( __FILE__ ) . 'classes/wordpress.php';
-		$wordpress = new Object_Sync_Sf_WordPress( $wpdb, $version, $slug, $mappings, $logging );
+		$wordpress = new Object_Sync_Sf_WordPress( $version, $slug, $mappings, $logging );
 		return $wordpress;
 	}
 
@@ -301,23 +288,21 @@ class Object_Sync_Salesforce {
 	/**
 	 * What to do upon activation of the plugin
 	 *
-	 * @param object $wpdb
 	 * @param string $version
 	 * @param string $slug
 	 *
 	 * @return object
 	 *   Instance of Object_Sync_Sf_Activate
 	 */
-	private function activate( $wpdb, $version, $slug ) {
+	private function activate( $version, $slug ) {
 		require_once plugin_dir_path( __FILE__ ) . 'classes/activate.php';
-		$activate = new Object_Sync_Sf_Activate( $wpdb, $version, $slug );
+		$activate = new Object_Sync_Sf_Activate( $version, $slug );
 		return $activate;
 	}
 
 	/**
 	 * What to do upon deactivation of the plugin
 	 *
-	 * @param object $wpdb
 	 * @param string $version
 	 * @param string $slug
 	 * @param array $schedulable_classes
@@ -325,16 +310,15 @@ class Object_Sync_Salesforce {
 	 * @return object
 	 *   Instance of Object_Sync_Sf_Deactivate
 	 */
-	private function deactivate( $wpdb, $version, $slug, $schedulable_classes ) {
+	private function deactivate( $version, $slug, $schedulable_classes ) {
 		require_once plugin_dir_path( __FILE__ ) . 'classes/deactivate.php';
-		$deactivate = new Object_Sync_Sf_Deactivate( $wpdb, $version, $slug, $schedulable_classes );
+		$deactivate = new Object_Sync_Sf_Deactivate( $version, $slug, $schedulable_classes );
 	}
 
 
 	/**
 	 * Methods to push data from WordPress to Salesforce
 	 *
-	 * @param object $wpdb
 	 * @param string $version
 	 * @param array $login_credentials
 	 * @param string $slug
@@ -347,16 +331,15 @@ class Object_Sync_Salesforce {
 	 * @return object
 	 *   Instance of Object_Sync_Sf_Salesforce_Push
 	 */
-	private function push( $wpdb, $version, $login_credentials, $slug, $wordpress, $salesforce, $mappings, $logging, $schedulable_classes, $queue ) {
+	private function push( $version, $login_credentials, $slug, $wordpress, $salesforce, $mappings, $logging, $schedulable_classes, $queue ) {
 		require_once plugin_dir_path( __FILE__ ) . 'classes/salesforce_push.php';
-		$push = new Object_Sync_Sf_Salesforce_Push( $wpdb, $version, $login_credentials, $slug, $wordpress, $salesforce, $mappings, $logging, $schedulable_classes, $queue );
+		$push = new Object_Sync_Sf_Salesforce_Push( $version, $login_credentials, $slug, $wordpress, $salesforce, $mappings, $logging, $schedulable_classes, $queue );
 		return $push;
 	}
 
 	/**
 	 * Methods to pull data from Salesforce to WordPress
 	 *
-	 * @param object $wpdb
 	 * @param string $version
 	 * @param array $login_credentials
 	 * @param string $slug
@@ -368,9 +351,9 @@ class Object_Sync_Salesforce {
 	 * @return object
 	 *   Instance of Object_Sync_Sf_Salesforce_Pull
 	 */
-	private function pull( $wpdb, $version, $login_credentials, $slug, $wordpress, $salesforce, $mappings, $logging, $schedulable_classes, $queue ) {
+	private function pull( $version, $login_credentials, $slug, $wordpress, $salesforce, $mappings, $logging, $schedulable_classes, $queue ) {
 		require_once plugin_dir_path( __FILE__ ) . 'classes/salesforce_pull.php';
-		$pull = new Object_Sync_Sf_Salesforce_Pull( $wpdb, $version, $login_credentials, $slug, $wordpress, $salesforce, $mappings, $logging, $schedulable_classes, $queue );
+		$pull = new Object_Sync_Sf_Salesforce_Pull( $version, $login_credentials, $slug, $wordpress, $salesforce, $mappings, $logging, $schedulable_classes, $queue );
 		return $pull;
 	}
 
@@ -378,7 +361,6 @@ class Object_Sync_Salesforce {
 	* Load the admin class.
 	* This also creates admin menu, unless the plugin that calls this library has indicated that it has its own menu
 	*
-	* @param object $wpdb
 	* @param string $version
 	* @param array $login_credentials
 	* @param string $slug
@@ -393,9 +375,9 @@ class Object_Sync_Salesforce {
 	*   Instance of Object_Sync_Sf_Admin
 	*
 	*/
-	private function load_admin( $wpdb, $version, $login_credentials, $slug, $wordpress, $salesforce, $mappings, $push, $pull, $logging, $schedulable_classes, $queue ) {
+	private function load_admin( $version, $login_credentials, $slug, $wordpress, $salesforce, $mappings, $push, $pull, $logging, $schedulable_classes, $queue ) {
 		require_once( plugin_dir_path( __FILE__ ) . 'classes/admin.php' );
-		$admin = new Object_Sync_Sf_Admin( $wpdb, $version, $login_credentials, $slug, $wordpress, $salesforce, $mappings, $push, $pull, $logging, $schedulable_classes, $queue );
+		$admin = new Object_Sync_Sf_Admin( $version, $login_credentials, $slug, $wordpress, $salesforce, $mappings, $push, $pull, $logging, $schedulable_classes, $queue );
 		add_action( 'admin_menu', array( $admin, 'create_admin_menu' ) );
 		add_action( 'admin_enqueue_scripts', array( $this, 'admin_scripts_and_styles' ) );
 		add_action( 'plugins_loaded', array( $this, 'textdomain' ) );

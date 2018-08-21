@@ -14,10 +14,10 @@ if ( ! class_exists( 'Object_Sync_Salesforce' ) ) {
  */
 class Object_Sync_Sf_Salesforce_Pull {
 
-	protected $wpdb;
 	protected $version;
 	protected $login_credentials;
 	protected $slug;
+	protected $wordpress;
 	protected $salesforce;
 	protected $mappings;
 	protected $logging;
@@ -32,7 +32,6 @@ class Object_Sync_Sf_Salesforce_Pull {
 	/**
 	* Constructor which sets up pull schedule
 	*
-	* @param object $wpdb
 	* @param string $version
 	* @param array $login_credentials
 	* @param string $slug
@@ -44,8 +43,7 @@ class Object_Sync_Sf_Salesforce_Pull {
 	* @param object $queue
 	* @throws \Exception
 	*/
-	public function __construct( $wpdb, $version, $login_credentials, $slug, $wordpress, $salesforce, $mappings, $logging, $schedulable_classes, $queue ) {
-		$this->wpdb                = $wpdb;
+	public function __construct( $version, $login_credentials, $slug, $wordpress, $salesforce, $mappings, $logging, $schedulable_classes, $queue ) {
 		$this->version             = $version;
 		$this->login_credentials   = $login_credentials;
 		$this->slug                = $slug;
@@ -316,7 +314,7 @@ class Object_Sync_Sf_Salesforce_Pull {
 				if ( isset( $this->logging ) ) {
 					$logging = $this->logging;
 				} elseif ( class_exists( 'Object_Sync_Sf_Logging' ) ) {
-					$logging = new Object_Sync_Sf_Logging( $this->wpdb, $this->version );
+					$logging = new Object_Sync_Sf_Logging( $this->version );
 				}
 
 				$logging->setup(
@@ -585,7 +583,7 @@ class Object_Sync_Sf_Salesforce_Pull {
 				if ( isset( $this->logging ) ) {
 					$logging = $this->logging;
 				} elseif ( class_exists( 'Object_Sync_Sf_Logging' ) ) {
-					$logging = new Object_Sync_Sf_Logging( $this->wpdb, $this->version );
+					$logging = new Object_Sync_Sf_Logging( $this->version );
 				}
 
 				$title = sprintf( esc_html__( 'Error: Salesforce Pull: unable to process queue item because it has no Salesforce Id.', 'object-sync-for-salesforce' ) );
@@ -653,7 +651,7 @@ class Object_Sync_Sf_Salesforce_Pull {
 							if ( isset( $this->logging ) ) {
 								$logging = $this->logging;
 							} elseif ( class_exists( 'Object_Sync_Sf_Logging' ) ) {
-								$logging = new Object_Sync_Sf_Logging( $this->wpdb, $this->version );
+								$logging = new Object_Sync_Sf_Logging( $this->version );
 							}
 
 							// translators: placeholders are: 1) what operation is happening, 2) the name of the WordPress object type, 3) the WordPress id field name, 4) the WordPress object id value, 5) the name of the Salesforce object, 6) the Salesforce Id value
@@ -695,7 +693,7 @@ class Object_Sync_Sf_Salesforce_Pull {
 							if ( isset( $this->logging ) ) {
 								$logging = $this->logging;
 							} elseif ( class_exists( 'Object_Sync_Sf_Logging' ) ) {
-								$logging = new Object_Sync_Sf_Logging( $this->wpdb, $this->version );
+								$logging = new Object_Sync_Sf_Logging( $this->version );
 							}
 
 							// translators: placeholders are: 1) what operation is happening, 2) the name of the WordPress object type, 3) the WordPress id field name, 4) the WordPress object id value, 5) the name of the Salesforce object, 6) the Salesforce Id value
@@ -738,7 +736,7 @@ class Object_Sync_Sf_Salesforce_Pull {
 						if ( isset( $this->logging ) ) {
 							$logging = $this->logging;
 						} elseif ( class_exists( 'Object_Sync_Sf_Logging' ) ) {
-							$logging = new Object_Sync_Sf_Logging( $this->wpdb, $this->version );
+							$logging = new Object_Sync_Sf_Logging( $this->version );
 						}
 
 						// translators: placeholders are: 1) what operation is happening, 2) the name of the WordPress object type, 3) the WordPress id field name, 4) the WordPress object id value, 5) the name of the Salesforce object, 6) the Salesforce Id value
@@ -900,7 +898,7 @@ class Object_Sync_Sf_Salesforce_Pull {
 								if ( isset( $this->logging ) ) {
 									$logging = $this->logging;
 								} elseif ( class_exists( 'Object_Sync_Sf_Logging' ) ) {
-									$logging = new Object_Sync_Sf_Logging( $this->wpdb, $this->version );
+									$logging = new Object_Sync_Sf_Logging( $this->version );
 								}
 								$parent = 0;
 								$logging->setup(
@@ -941,7 +939,7 @@ class Object_Sync_Sf_Salesforce_Pull {
 							if ( isset( $this->logging ) ) {
 								$logging = $this->logging;
 							} elseif ( class_exists( 'Object_Sync_Sf_Logging' ) ) {
-								$logging = new Object_Sync_Sf_Logging( $this->wpdb, $this->version );
+								$logging = new Object_Sync_Sf_Logging( $this->version );
 							}
 							// if we know the WordPress object id we can put it in there
 							if ( null !== $wordpress_id ) {
@@ -1013,7 +1011,7 @@ class Object_Sync_Sf_Salesforce_Pull {
 					if ( isset( $this->logging ) ) {
 						$logging = $this->logging;
 					} elseif ( class_exists( 'Object_Sync_Sf_Logging' ) ) {
-						$logging = new Object_Sync_Sf_Logging( $this->wpdb, $this->version );
+						$logging = new Object_Sync_Sf_Logging( $this->version );
 					}
 
 					// if we know the WordPress object id we can put it in there
@@ -1065,7 +1063,7 @@ class Object_Sync_Sf_Salesforce_Pull {
 					if ( isset( $this->logging ) ) {
 						$logging = $this->logging;
 					} elseif ( class_exists( 'Object_Sync_Sf_Logging' ) ) {
-						$logging = new Object_Sync_Sf_Logging( $this->wpdb, $this->version );
+						$logging = new Object_Sync_Sf_Logging( $this->version );
 					}
 
 					// translators: placeholders are: 1) what operation is happening, 2) the name of the WordPress object type, 3) the WordPress id field name, 4) the WordPress object id value, 5) the name of the Salesforce object, 6) the Salesforce Id value
@@ -1101,7 +1099,7 @@ class Object_Sync_Sf_Salesforce_Pull {
 					if ( isset( $this->logging ) ) {
 						$logging = $this->logging;
 					} elseif ( class_exists( 'Object_Sync_Sf_Logging' ) ) {
-						$logging = new Object_Sync_Sf_Logging( $this->wpdb, $this->version );
+						$logging = new Object_Sync_Sf_Logging( $this->version );
 					}
 
 					if ( is_object( $wordpress_id ) ) {
@@ -1168,7 +1166,7 @@ class Object_Sync_Sf_Salesforce_Pull {
 					if ( isset( $this->logging ) ) {
 						$logging = $this->logging;
 					} elseif ( class_exists( 'Object_Sync_Sf_Logging' ) ) {
-						$logging = new Object_Sync_Sf_Logging( $this->wpdb, $this->version );
+						$logging = new Object_Sync_Sf_Logging( $this->version );
 					}
 
 					// translators: placeholders are: 1) what operation is happening, 2) the name of the WordPress object type, 3) the WordPress id field name, 4) the WordPress object id value, 5) the name of the Salesforce object, 6) the Salesforce Id value
@@ -1198,7 +1196,7 @@ class Object_Sync_Sf_Salesforce_Pull {
 					if ( isset( $this->logging ) ) {
 						$logging = $this->logging;
 					} elseif ( class_exists( 'Object_Sync_Sf_Logging' ) ) {
-						$logging = new Object_Sync_Sf_Logging( $this->wpdb, $this->version );
+						$logging = new Object_Sync_Sf_Logging( $this->version );
 					}
 
 					// translators: placeholders are: 1) what operation is happening, 2) the name of the WordPress object, 3) the WordPress id field name, 4) the WordPress object id value, 5) the name of the Salesforce object, 6) the Salesforce Id value

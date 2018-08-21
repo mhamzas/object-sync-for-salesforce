@@ -10,11 +10,10 @@ if ( ! class_exists( 'Object_Sync_Salesforce' ) ) {
 }
 
 /**
- * Work with the WordPress $wpdb object. This class can make read and write calls to the WordPress database, and also cache the responses.
+ * Work with the WordPress data methods. This class can make read and write calls to the WordPress database, and also cache the responses.
  */
 class Object_Sync_Sf_WordPress {
 
-	protected $wpdb;
 	protected $version;
 	protected $slug;
 	protected $mappings;
@@ -23,15 +22,13 @@ class Object_Sync_Sf_WordPress {
 	/**
 	 * Constructor which discovers objects in WordPress
 	 *
-	 * @param object $wpdb A wpdb object.
 	 * @param string $version The plugin version.
 	 * @param string $slug The plugin slug.
 	 * @param object $mappings Mapping objects.
 	 * @param object $logging a Object_Sync_Sf_Logging instance.
 	 * @throws \Exception
 	 */
-	public function __construct( $wpdb, $version, $slug, $mappings, $logging ) {
-		$this->wpdb     = $wpdb;
+	public function __construct( $version, $slug, $mappings, $logging ) {
 		$this->version  = $version;
 		$this->slug     = $slug;
 		$this->mappings = $mappings;
@@ -101,6 +98,7 @@ class Object_Sync_Sf_WordPress {
 	 * @return array $object_table_structure The table structure.
 	 */
 	public function get_wordpress_table_structure( $object_type ) {
+		global $wpdb;
 		if ( 'attachment' === $object_type ) {
 			$object_table_structure = array(
 				'object_name'     => 'post',
@@ -116,11 +114,11 @@ class Object_Sync_Sf_WordPress {
 					'update' => 'wp_update_attachment_metadata',
 					'delete' => '',
 				),
-				'content_table'   => $this->wpdb->prefix . 'posts',
+				'content_table'   => $wpdb->prefix . 'posts',
 				'id_field'        => 'ID',
-				'meta_table'      => $this->wpdb->prefix . 'postmeta',
+				'meta_table'      => $wpdb->prefix . 'postmeta',
 				'meta_join_field' => 'post_id',
-				'where'           => 'AND ' . $this->wpdb->prefix . 'posts.post_type = "' . $object_type . '"',
+				'where'           => 'AND ' . $wpdb->prefix . 'posts.post_type = "' . $object_type . '"',
 				'ignore_keys'     => array(),
 			);
 		} elseif ( 'user' === $object_type ) {
@@ -139,9 +137,9 @@ class Object_Sync_Sf_WordPress {
 					'update' => 'update_user_meta',
 					'delete' => 'delete_user_meta',
 				),
-				'content_table'   => $this->wpdb->prefix . 'users',
+				'content_table'   => $wpdb->prefix . 'users',
 				'id_field'        => 'ID',
-				'meta_table'      => $this->wpdb->prefix . 'usermeta',
+				'meta_table'      => $wpdb->prefix . 'usermeta',
 				'meta_join_field' => 'user_id',
 				'where'           => '',
 				'ignore_keys'     => array( // Keep it simple and avoid security risks.
@@ -165,11 +163,11 @@ class Object_Sync_Sf_WordPress {
 					'update' => 'update_post_meta',
 					'delete' => 'delete_post_meta',
 				),
-				'content_table'   => $this->wpdb->prefix . 'posts',
+				'content_table'   => $wpdb->prefix . 'posts',
 				'id_field'        => 'ID',
-				'meta_table'      => $this->wpdb->prefix . 'postmeta',
+				'meta_table'      => $wpdb->prefix . 'postmeta',
 				'meta_join_field' => 'post_id',
-				'where'           => 'AND ' . $this->wpdb->prefix . 'posts.post_type = "' . $object_type . '"',
+				'where'           => 'AND ' . $wpdb->prefix . 'posts.post_type = "' . $object_type . '"',
 				'ignore_keys'     => array(),
 			);
 		} elseif ( 'category' === $object_type || 'tag' === $object_type || 'post_tag' === $object_type ) {
@@ -188,9 +186,9 @@ class Object_Sync_Sf_WordPress {
 					'update' => 'update_term_meta',
 					'delete' => 'delete_metadata',
 				),
-				'content_table'   => $this->wpdb->prefix . 'terms',
+				'content_table'   => $wpdb->prefix . 'terms',
 				'id_field'        => 'term_id',
-				'meta_table'      => array( $this->wpdb->prefix . 'termmeta', $this->wpdb->prefix . 'term_taxonomy' ),
+				'meta_table'      => array( $wpdb->prefix . 'termmeta', $wpdb->prefix . 'term_taxonomy' ),
 				'meta_join_field' => 'term_id',
 				'where'           => '',
 				'ignore_keys'     => array(),
@@ -210,9 +208,9 @@ class Object_Sync_Sf_WordPress {
 					'update' => 'update_comment_meta',
 					'delete' => 'delete_comment_metadata',
 				),
-				'content_table'   => $this->wpdb->prefix . 'comments',
+				'content_table'   => $wpdb->prefix . 'comments',
 				'id_field'        => 'comment_ID',
-				'meta_table'      => $this->wpdb->prefix . 'commentmeta',
+				'meta_table'      => $wpdb->prefix . 'commentmeta',
 				'meta_join_field' => 'comment_id',
 				'where'           => '',
 				'ignore_keys'     => array(),
@@ -232,11 +230,11 @@ class Object_Sync_Sf_WordPress {
 					'update' => 'update_post_meta',
 					'delete' => 'delete_post_meta',
 				),
-				'content_table'   => $this->wpdb->prefix . 'posts',
+				'content_table'   => $wpdb->prefix . 'posts',
 				'id_field'        => 'ID',
-				'meta_table'      => $this->wpdb->prefix . 'postmeta',
+				'meta_table'      => $wpdb->prefix . 'postmeta',
 				'meta_join_field' => 'post_id',
-				'where'           => 'AND ' . $this->wpdb->prefix . 'posts.post_type = "' . $object_type . '"',
+				'where'           => 'AND ' . $wpdb->prefix . 'posts.post_type = "' . $object_type . '"',
 				'ignore_keys'     => array(),
 			);
 		} // End if().
@@ -435,12 +433,13 @@ class Object_Sync_Sf_WordPress {
 	 * @return array $all_fields The fields for the object.
 	 */
 	private function object_fields( $object_name, $id_field, $content_table, $content_methods, $meta_table, $meta_methods, $where, $ignore_keys ) {
+		global $wpdb;
 		// These two queries load all the fields from the specified object unless they have been specified as ignore fields.
 		// They also load the fields that are meta_keys from the specified object's meta table.
 		// Maybe a box for a custom query, since custom fields get done in so many ways.
 		// Eventually this would be the kind of thing we could use fields api for, if it ever gets done.
-		$data_fields      = $this->wpdb->get_col( "DESC {$content_table}", 0 );
-		$data_field_types = $this->wpdb->get_col( "DESC {$content_table}", 1 ); // get the database field types
+		$data_fields      = $wpdb->get_col( "DESC {$content_table}", 0 );
+		$data_field_types = $wpdb->get_col( "DESC {$content_table}", 1 ); // get the database field types
 
 		if ( is_array( $meta_table ) ) {
 			$tax_table  = $meta_table[1];
@@ -454,7 +453,7 @@ class Object_Sync_Sf_WordPress {
 		WHERE ' . $meta_table . '.meta_key != ""
 		' . $where . '
 		';
-		$meta_fields = $this->wpdb->get_results( $select_meta );
+		$meta_fields = $wpdb->get_results( $select_meta );
 		$all_fields  = array();
 
 		foreach ( $data_fields as $key => $value ) {
@@ -479,7 +478,7 @@ class Object_Sync_Sf_WordPress {
 		}
 
 		if ( 'term' === $object_name ) {
-			$taxonomy = $this->wpdb->get_col( "DESC {$tax_table}", 0 );
+			$taxonomy = $wpdb->get_col( "DESC {$tax_table}", 0 );
 			foreach ( $taxonomy as $key => $value ) {
 				$exists = array_search( $value, array_column( $all_fields, 'key' ), true );
 				if ( 0 !== $exists ) {
@@ -574,7 +573,7 @@ class Object_Sync_Sf_WordPress {
 	 * @param string $name Object type name, E.g., user, post, comment.
 	 * @param string $key The field to check if this record should be created or updated.
 	 * @param string $value The value for this record of the field specified for $key.
-	 * @param array  $methods What WordPress methods do we use to get the data, if there are any. otherwise, maybe will have to do a wpdb query.
+	 * @param array  $methods What WordPress methods do we use to get the data, if there are any. otherwise, maybe will have to do a database query.
 	 * @param array  $params Values of the fields to set for the object.
 	 * @param bool   $push_drafts Whether to save WordPress drafts when pushing to Salesforce.
 	 * @param bool   $check_only Allows this method to only check for matching records, instead of making any data changes.
@@ -904,7 +903,7 @@ class Object_Sync_Sf_WordPress {
 	 *
 	 * @param string $key What key we are looking at for possible matches.
 	 * @param string $value What value we are looking at for possible matches.
-	 * @param array  $methods What WordPress methods do we use to get the data, if there are any. otherwise, maybe will have to do a wpdb query.
+	 * @param array  $methods What WordPress methods do we use to get the data, if there are any. otherwise, maybe will have to do a database query.
 	 * @param array  $params Array of user data params. This is generated by Object_Sync_Sf_Mapping::map_params().
 	 * @param string $id_field Optional string of what the ID field is, if it is ever not ID.
 	 * @param bool   $push_drafts Whether to save WordPress drafts when pushing to Salesforce.
@@ -1007,7 +1006,7 @@ class Object_Sync_Sf_WordPress {
 		if ( isset( $this->logging ) ) {
 			$logging = $this->logging;
 		} elseif ( class_exists( 'Object_Sync_Sf_Logging' ) ) {
-			$logging = new Object_Sync_Sf_Logging( $this->wpdb, $this->version );
+			$logging = new Object_Sync_Sf_Logging( $this->version );
 		}
 		$logging->setup(
 			// todo: can we get any more specific about this?
@@ -1188,7 +1187,7 @@ class Object_Sync_Sf_WordPress {
 	 *
 	 * @param string $key What key we are looking at for possible matches.
 	 * @param string $value What value we are looking at for possible matches.
-	 * @param array  $methods What WordPress methods do we use to get the data, if there are any. otherwise, maybe will have to do a wpdb query.
+	 * @param array  $methods What WordPress methods do we use to get the data, if there are any. otherwise, maybe will have to do a database query.
 	 * @param array  $params Array of post data params.
 	 * @param string $id_field optional string of what the ID field is, if it is ever not ID.
 	 * @param bool   $push_drafts Indicates whether we should match against draft posts.
@@ -1324,7 +1323,7 @@ class Object_Sync_Sf_WordPress {
 		if ( isset( $this->logging ) ) {
 			$logging = $this->logging;
 		} elseif ( class_exists( 'Object_Sync_Sf_Logging' ) ) {
-			$logging = new Object_Sync_Sf_Logging( $this->wpdb, $this->version );
+			$logging = new Object_Sync_Sf_Logging( $this->version );
 		}
 		$logging->setup(
 			// todo: can we be more explicit here about what post upsert failed?
@@ -1501,7 +1500,7 @@ class Object_Sync_Sf_WordPress {
 	 *
 	 * @param string $key What key we are looking at for possible matches.
 	 * @param string $value What value we are looking at for possible matches.
-	 * @param array  $methods What WordPress methods do we use to get the data, if there are any. otherwise, maybe will have to do a wpdb query.
+	 * @param array  $methods What WordPress methods do we use to get the data, if there are any. otherwise, maybe will have to do a database query.
 	 * @param array  $params Array of attachment data params.
 	 * @param string $id_field Optional string of what the ID field is, if it is ever not ID.
 	 * @param bool   $check_only Allows this method to only check for matching records, instead of making any data changes.
@@ -1632,7 +1631,7 @@ class Object_Sync_Sf_WordPress {
 		if ( isset( $this->logging ) ) {
 			$logging = $this->logging;
 		} elseif ( class_exists( 'Object_Sync_Sf_Logging' ) ) {
-			$logging = new Object_Sync_Sf_Logging( $this->wpdb, $this->version );
+			$logging = new Object_Sync_Sf_Logging( $this->version );
 		}
 		$logging->setup(
 			esc_html__( 'Error: Attachment: Tried to run attachment_upsert, and ended up without an attachment id', 'object-sync-for-salesforce' ),
@@ -1843,7 +1842,7 @@ class Object_Sync_Sf_WordPress {
 	 *
 	 * @param string $key What key we are looking at for possible matches.
 	 * @param string $value What value we are looking at for possible matches.
-	 * @param array  $methods What WordPress methods do we use to get the data, if there are any. otherwise, maybe will have to do a wpdb query.
+	 * @param array  $methods What WordPress methods do we use to get the data, if there are any. otherwise, maybe will have to do a database query.
 	 * @param array  $params Array of term data params.
 	 * @param string $taxonomy The taxonomy to which to add the term. this is required..
 	 * @param string $id_field Optional string of what the ID field is, if it is ever not ID.
@@ -1953,7 +1952,7 @@ class Object_Sync_Sf_WordPress {
 		if ( isset( $this->logging ) ) {
 			$logging = $this->logging;
 		} elseif ( class_exists( 'Object_Sync_Sf_Logging' ) ) {
-			$logging = new Object_Sync_Sf_Logging( $this->wpdb, $this->version );
+			$logging = new Object_Sync_Sf_Logging( $this->version );
 		}
 		$logging->setup(
 			esc_html__( 'Error: Terms: Tried to run term_upsert, and ended up without a term id', 'object-sync-for-salesforce' ),
@@ -2151,7 +2150,7 @@ class Object_Sync_Sf_WordPress {
 	 *
 	 * @param string $key What key we are looking at for possible matches.
 	 * @param string $value What value we are looking at for possible matches.
-	 * @param array  $methods What WordPress methods do we use to get the data, if there are any. otherwise, maybe will have to do a wpdb query.
+	 * @param array  $methods What WordPress methods do we use to get the data, if there are any. otherwise, maybe will have to do a database query.
 	 * @param array  $params Array of comment data params.
 	 * @param string $id_field Optional string of what the ID field is, if it is ever not comment_ID.
 	 * @param bool   $push_drafts Whether to save WordPress drafts when pushing to Salesforce.
@@ -2206,7 +2205,7 @@ class Object_Sync_Sf_WordPress {
 				if ( isset( $this->logging ) ) {
 					$logging = $this->logging;
 				} elseif ( class_exists( 'Object_Sync_Sf_Logging' ) ) {
-					$logging = new Object_Sync_Sf_Logging( $this->wpdb, $this->version );
+					$logging = new Object_Sync_Sf_Logging( $this->version );
 				}
 				$logging->setup(
 					sprintf(
@@ -2290,7 +2289,7 @@ class Object_Sync_Sf_WordPress {
 		if ( isset( $this->logging ) ) {
 			$logging = $this->logging;
 		} elseif ( class_exists( 'Object_Sync_Sf_Logging' ) ) {
-			$logging = new Object_Sync_Sf_Logging( $this->wpdb, $this->version );
+			$logging = new Object_Sync_Sf_Logging( $this->version );
 		}
 		$logging->setup(
 			esc_html__( 'Error: Comments: Tried to run comment_upsert, and ended up without a comment id', 'object-sync-for-salesforce' ),

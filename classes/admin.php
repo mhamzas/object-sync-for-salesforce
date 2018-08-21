@@ -14,7 +14,6 @@ if ( ! class_exists( 'Object_Sync_Salesforce' ) ) {
  */
 class Object_Sync_Sf_Admin {
 
-	protected $wpdb;
 	protected $version;
 	protected $login_credentials;
 	protected $slug;
@@ -69,7 +68,6 @@ class Object_Sync_Sf_Admin {
 	/**
 	* Constructor which sets up admin pages
 	*
-	* @param object $wpdb
 	* @param string $version
 	* @param array $login_credentials
 	* @param string $slug
@@ -82,8 +80,7 @@ class Object_Sync_Sf_Admin {
 	* @param array $schedulable_classes
 	* @throws \Exception
 	*/
-	public function __construct( $wpdb, $version, $login_credentials, $slug, $wordpress, $salesforce, $mappings, $push, $pull, $logging, $schedulable_classes ) {
-		$this->wpdb                = $wpdb;
+	public function __construct( $version, $login_credentials, $slug, $wordpress, $salesforce, $mappings, $push, $pull, $logging, $schedulable_classes ) {
 		$this->version             = $version;
 		$this->login_credentials   = $login_credentials;
 		$this->slug                = $slug;
@@ -1454,7 +1451,7 @@ class Object_Sync_Sf_Admin {
 	*
 	*/
 	public function export_json_file() {
-
+		global $wpdb;
 		if ( ! wp_verify_nonce( $_POST['object_sync_for_salesforce_nonce_export'], 'object_sync_for_salesforce_nonce_export' ) ) {
 			return;
 		}
@@ -1470,7 +1467,7 @@ class Object_Sync_Sf_Admin {
 			$export['object_maps'] = $this->mappings->get_object_maps();
 		}
 		if ( in_array( 'plugin_settings', $post_data['export'] ) ) {
-			$export['plugin_settings'] = $this->wpdb->get_results( 'SELECT * FROM ' . $this->wpdb->prefix . 'options' . ' WHERE option_name like "' . $this->option_prefix . '%"', ARRAY_A );
+			$export['plugin_settings'] = $wpdb->get_results( 'SELECT * FROM ' . $wpdb->prefix . 'options' . ' WHERE option_name like "' . $this->option_prefix . '%"', ARRAY_A );
 		}
 		nocache_headers();
 		header( 'Content-Type: application/json; charset=utf-8' );
@@ -1929,11 +1926,12 @@ class Object_Sync_Sf_Admin {
 	* Load the schedule class
 	*/
 	private function schedule( $schedule_name ) {
+		global $wpdb;
 		if ( ! class_exists( 'Object_Sync_Sf_Schedule' ) && file_exists( plugin_dir_path( __FILE__ ) . '../vendor/autoload.php' ) ) {
 			require_once plugin_dir_path( __FILE__ ) . '../vendor/autoload.php';
 			require_once plugin_dir_path( __FILE__ ) . '../classes/schedule.php';
 		}
-		$schedule       = new Object_Sync_Sf_Schedule( $this->wpdb, $this->version, $this->login_credentials, $this->slug, $this->wordpress, $this->salesforce, $this->mappings, $schedule_name, $this->logging, $this->schedulable_classes );
+		$schedule       = new Object_Sync_Sf_Schedule( $this->version, $this->login_credentials, $this->slug, $this->wordpress, $this->salesforce, $this->mappings, $schedule_name, $this->logging, $this->schedulable_classes );
 		$this->schedule = $schedule;
 		return $schedule;
 	}

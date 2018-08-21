@@ -14,7 +14,6 @@ if ( ! class_exists( 'Object_Sync_Salesforce' ) ) {
  */
 class Object_Sync_Sf_Logging extends WP_Logging {
 
-	protected $wpdb;
 	protected $version;
 
 	public $enabled;
@@ -24,12 +23,10 @@ class Object_Sync_Sf_Logging extends WP_Logging {
 	/**
 	 * Constructor which sets content type and pruning
 	 *
-	 * @param object $wpdb An instance of the wpdb class.
 	 * @param string $version The version of this plugin.
 	 * @throws \Exception
 	 */
-	public function __construct( $wpdb, $version ) {
-		$this->wpdb    = $wpdb;
+	public function __construct( $version ) {
 		$this->version = $version;
 
 		$this->enabled         = get_option( 'object_sync_for_salesforce_enable_logging', false );

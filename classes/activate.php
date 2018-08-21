@@ -14,20 +14,17 @@ if ( ! class_exists( 'Object_Sync_Salesforce' ) ) {
  */
 class Object_Sync_Sf_Activate {
 
-	protected $wpdb;
 	protected $version;
 	protected $installed_version;
 
 	/**
 	* Constructor which sets up activate hooks
 	*
-	* @param object $wpdb
 	* @param string $version
 	* @param string $slug
 	*
 	*/
-	public function __construct( $wpdb, $version, $slug ) {
-		$this->wpdb              = $wpdb;
+	public function __construct( $version, $slug ) {
 		$this->version           = $version;
 		$this->installed_version = get_option( 'object_sync_for_salesforce_db_version', '' );
 		register_activation_hook( dirname( __DIR__ ) . '/' . $slug . '.php', array( $this, 'php_requirements' ) );
@@ -53,10 +50,10 @@ class Object_Sync_Sf_Activate {
 	*
 	*/
 	public function wordpress_salesforce_tables() {
+		global $wpdb;
+		$charset_collate = $wpdb->get_charset_collate();
 
-		$charset_collate = $this->wpdb->get_charset_collate();
-
-		$field_map_table = $this->wpdb->prefix . 'object_sync_sf_field_map';
+		$field_map_table = $wpdb->prefix . 'object_sync_sf_field_map';
 		$field_map_sql   = "CREATE TABLE $field_map_table (
 			id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
 			label varchar(64) NOT NULL DEFAULT '',
@@ -77,7 +74,7 @@ class Object_Sync_Sf_Activate {
 			KEY name_sf_type_wordpress_type (wordpress_object,salesforce_object)
 		) ENGINE=InnoDB $charset_collate";
 
-		$object_map_table = $this->wpdb->prefix . 'object_sync_sf_object_map';
+		$object_map_table = $wpdb->prefix . 'object_sync_sf_object_map';
 		$object_map_sql   = "CREATE TABLE $object_map_table (
 			id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
 			wordpress_id varchar(32) NOT NULL,
