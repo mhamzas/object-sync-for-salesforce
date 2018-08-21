@@ -445,7 +445,22 @@ class Object_Sync_Sf_Salesforce_Push {
 						'sf_sync_trigger' => $sf_sync_trigger,
 					);
 
-					$this->queue->save_to_queue( $data, 'push' );
+					// Initialize the queue with the data for this record and save
+					$job_processor = array(
+						'version'           => $this->version,
+						'login_credentials' => $this->login_credentials,
+						'slug'              => $this->slug,
+						'wordpress'         => $this->wordpress,
+						'salesforce'        => $this->salesforce,
+						'mappings'          => $this->mappings,
+						'logging'           => $this->logging,
+						'schedule_name'     => $this->schedule_name,
+						'classes'           => $this->schedulable_classes,
+						'queue'             => $this->queue,
+					);
+
+					// Initialize the queue with the data for this record and save
+					$this->queue->save_to_queue( $data, $job_processor );
 
 				} else {
 					// this one is not async. do it immediately.
@@ -453,14 +468,6 @@ class Object_Sync_Sf_Salesforce_Push {
 				} // End if().
 			} // End if(). if the trigger does not match our requirements, skip it
 		} // End foreach().
-	}
-
-	private function add_to_queue( $data ) {
-		if ( ! class_exists( 'Salesforce_Queue_Job' ) && file_exists( plugin_dir_path( __FILE__ ) . '../vendor/autoload.php' ) ) {
-			require_once plugin_dir_path( __FILE__ ) . '../vendor/autoload.php';
-			require_once plugin_dir_path( __FILE__ ) . '../classes/salesforce_queue_job.php';
-		}
-		wp_queue()->push( new Salesforce_Queue_Job( $data, 'push' ) );
 	}
 
 	/**
