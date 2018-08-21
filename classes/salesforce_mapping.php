@@ -14,7 +14,6 @@ if ( ! class_exists( 'Object_Sync_Salesforce' ) ) {
  */
 class Object_Sync_Sf_Mapping {
 
-	protected $wpdb;
 	protected $version;
 	protected $slug;
 	protected $logging;
@@ -54,20 +53,19 @@ class Object_Sync_Sf_Mapping {
 	/**
 	 * Constructor which sets up links between the systems
 	 *
-	 * @param object $wpdb A WPDB object.
 	 * @param string $version The plugin version.
 	 * @param string $slug The plugin slug.
 	 * @param object $logging Object_Sync_Sf_Logging.
 	 * @throws \Exception
 	 */
-	public function __construct( $wpdb, $version, $slug, $logging ) {
-		$this->wpdb    = $wpdb;
+	public function __construct( $version, $slug, $logging ) {
+		global $wpdb;
 		$this->version = $version;
 		$this->slug    = $slug;
 		$this->logging = $logging;
 
-		$this->fieldmap_table   = $this->wpdb->prefix . 'object_sync_sf_field_map';
-		$this->object_map_table = $this->wpdb->prefix . 'object_sync_sf_object_map';
+		$this->fieldmap_table   = $wpdb->prefix . 'object_sync_sf_field_map';
+		$this->object_map_table = $wpdb->prefix . 'object_sync_sf_object_map';
 
 		/*
 		 * These parameters are how we define when syncing should occur on each field map.
@@ -124,13 +122,14 @@ class Object_Sync_Sf_Mapping {
 	 * @throws \Exception
 	 */
 	public function create_fieldmap( $posted = array(), $wordpress_fields = array(), $salesforce_fields = array() ) {
+		global $wpdb;
 		$data = $this->setup_fieldmap_data( $posted, $wordpress_fields, $salesforce_fields );
 		if ( version_compare( $this->version, '1.2.5', '>=' ) ) {
 			$data['version'] = $this->version;
 		}
-		$insert = $this->wpdb->insert( $this->fieldmap_table, $data );
+		$insert = $wpdb->insert( $this->fieldmap_table, $data );
 		if ( 1 === $insert ) {
-			return $this->wpdb->insert_id;
+			return $wpdb->insert_id;
 		} else {
 			return false;
 		}
@@ -146,9 +145,10 @@ class Object_Sync_Sf_Mapping {
 	 * @throws \Exception
 	 */
 	public function get_fieldmaps( $id = null, $conditions = array(), $reset = false ) {
+		global $wpdb;
 		$table = $this->fieldmap_table;
 		if ( null !== $id ) { // get one fieldmap.
-			$map                                    = $this->wpdb->get_row( 'SELECT * FROM ' . $table . ' WHERE id = ' . $id, ARRAY_A );
+			$map                                    = $wpdb->get_row( 'SELECT * FROM ' . $table . ' WHERE id = ' . $id, ARRAY_A );
 			$map['salesforce_record_types_allowed'] = maybe_unserialize( $map['salesforce_record_types_allowed'] );
 
 			$map['fields']        = maybe_unserialize( $map['fields'] );
@@ -177,7 +177,7 @@ class Object_Sync_Sf_Mapping {
 				$where = '';
 			}
 
-			$mappings = $this->wpdb->get_results( 'SELECT * FROM ' . $table . $where . ' ORDER BY `weight`', ARRAY_A );
+			$mappings = $wpdb->get_results( 'SELECT * FROM ' . $table . $where . ' ORDER BY `weight`', ARRAY_A );
 
 			if ( ! empty( $mappings ) ) {
 				$mappings = $this->prepare_fieldmap_data( $mappings, $record_type );
@@ -189,9 +189,9 @@ class Object_Sync_Sf_Mapping {
 
 			// if the version is greater than or equal to 1.2.5, the fieldmap table has a version column
 			if ( version_compare( $this->version, '1.2.5', '>=' ) ) {
-				$mappings = $this->wpdb->get_results( "SELECT `id`, `label`, `wordpress_object`, `salesforce_object`, `salesforce_record_types_allowed`, `salesforce_record_type_default`, `fields`, `pull_trigger_field`, `sync_triggers`, `push_async`, `push_drafts`, `weight`, `version` FROM $table", ARRAY_A );
+				$mappings = $wpdb->get_results( "SELECT `id`, `label`, `wordpress_object`, `salesforce_object`, `salesforce_record_types_allowed`, `salesforce_record_type_default`, `fields`, `pull_trigger_field`, `sync_triggers`, `push_async`, `push_drafts`, `weight`, `version` FROM $table", ARRAY_A );
 			} else {
-				$mappings = $this->wpdb->get_results( "SELECT `id`, `label`, `wordpress_object`, `salesforce_object`, `salesforce_record_types_allowed`, `salesforce_record_type_default`, `fields`, `pull_trigger_field`, `sync_triggers`, `push_async`, `push_drafts`, `weight` FROM $table", ARRAY_A );
+				$mappings = $wpdb->get_results( "SELECT `id`, `label`, `wordpress_object`, `salesforce_object`, `salesforce_record_types_allowed`, `salesforce_record_type_default`, `fields`, `pull_trigger_field`, `sync_triggers`, `push_async`, `push_drafts`, `weight` FROM $table", ARRAY_A );
 			}
 
 			if ( ! empty( $mappings ) ) {
@@ -261,11 +261,12 @@ class Object_Sync_Sf_Mapping {
 	 * @throws \Exception
 	 */
 	public function update_fieldmap( $posted = array(), $wordpress_fields = array(), $salesforce_fields = array(), $id = '' ) {
+		global $wpdb;
 		$data = $this->setup_fieldmap_data( $posted, $wordpress_fields, $salesforce_fields );
 		if ( version_compare( $this->version, '1.2.5', '>=' ) && ! isset( $data['updated'] ) ) {
 			$data['version'] = $this->version;
 		}
-		$update = $this->wpdb->update(
+		$update = $wpdb->update(
 			$this->fieldmap_table,
 			$data,
 			array(
@@ -399,10 +400,11 @@ class Object_Sync_Sf_Mapping {
 	 * @throws \Exception
 	 */
 	public function delete_fieldmap( $id = '' ) {
+		global $wpdb;
 		$data   = array(
 			'id' => $id,
 		);
-		$delete = $this->wpdb->delete( $this->fieldmap_table, $data );
+		$delete = $wpdb->delete( $this->fieldmap_table, $data );
 		if ( 1 === $delete ) {
 			return true;
 		} else {
@@ -418,19 +420,20 @@ class Object_Sync_Sf_Mapping {
 	 * @throws \Exception
 	 */
 	public function create_object_map( $posted = array() ) {
+		global $wpdb;
 		$data            = $this->setup_object_map_data( $posted );
 		$data['created'] = current_time( 'mysql' );
 		// Check to see if we don't know the salesforce id and it is not a temporary id, or if this is pending.
 		// If it is using a temporary id, the map will get updated after it finishes running; it won't call this method unless there's an error, which we should log.
 		if ( substr( $data['salesforce_id'], 0, 7 ) !== 'tmp_sf_' || 'pending' === $data['action'] ) {
 			unset( $data['action'] );
-			$insert = $this->wpdb->insert( $this->object_map_table, $data );
+			$insert = $wpdb->insert( $this->object_map_table, $data );
 		} else {
 			$status = 'error';
 			if ( isset( $this->logging ) ) {
 				$logging = $this->logging;
 			} elseif ( class_exists( 'Object_Sync_Sf_Logging' ) ) {
-				$logging = new Object_Sync_Sf_Logging( $this->wpdb, $this->version );
+				$logging = new Object_Sync_Sf_Logging( $this->version );
 			}
 			$logging->setup(
 				sprintf(
@@ -447,15 +450,15 @@ class Object_Sync_Sf_Mapping {
 			return false;
 		}
 		if ( 1 === $insert ) {
-			return $this->wpdb->insert_id;
-		} elseif ( false !== strpos( $this->wpdb->last_error, 'Duplicate entry' ) ) {
+			return $wpdb->insert_id;
+		} elseif ( false !== strpos( $wpdb->last_error, 'Duplicate entry' ) ) {
 			$mapping = $this->load_by_salesforce( $data['salesforce_id'] );
 			$id      = $mapping['id'];
 			$status  = 'error';
 			if ( isset( $this->logging ) ) {
 				$logging = $this->logging;
 			} elseif ( class_exists( 'Object_Sync_Sf_Logging' ) ) {
-				$logging = new Object_Sync_Sf_Logging( $this->wpdb, $this->version );
+				$logging = new Object_Sync_Sf_Logging( $this->version );
 			}
 			$logging->setup(
 				sprintf(
@@ -484,6 +487,7 @@ class Object_Sync_Sf_Mapping {
 	 * @throws \Exception
 	 */
 	public function get_object_maps( $conditions = array(), $reset = false ) {
+		global $wpdb;
 		$table = $this->object_map_table;
 		$order = ' ORDER BY object_updated, created';
 		if ( ! empty( $conditions ) ) { // get multiple but with a limitation.
@@ -503,13 +507,13 @@ class Object_Sync_Sf_Mapping {
 				$where = '';
 			}
 
-			$mappings = $this->wpdb->get_results( 'SELECT * FROM ' . $table . $where . $order, ARRAY_A );
-			if ( ! empty( $mappings ) && 1 === $this->wpdb->num_rows ) {
+			$mappings = $wpdb->get_results( 'SELECT * FROM ' . $table . $where . $order, ARRAY_A );
+			if ( ! empty( $mappings ) && 1 === $wpdb->num_rows ) {
 				$mappings = $mappings[0];
 			}
 		} else { // get all of the mappings. ALL THE MAPPINGS.
-			$mappings = $this->wpdb->get_results( 'SELECT * FROM ' . $table . $order, ARRAY_A );
-			if ( ! empty( $mappings ) && 1 === $this->wpdb->num_rows ) {
+			$mappings = $wpdb->get_results( 'SELECT * FROM ' . $table . $order, ARRAY_A );
+			if ( ! empty( $mappings ) && 1 === $wpdb->num_rows ) {
 				$mappings = $mappings[0];
 			}
 		}
@@ -527,11 +531,12 @@ class Object_Sync_Sf_Mapping {
 	 * @throws \Exception
 	 */
 	public function update_object_map( $posted = array(), $id = '' ) {
+		global $wpdb;
 		$data = $this->setup_object_map_data( $posted );
 		if ( ! isset( $data['object_updated'] ) ) {
 			$data['object_updated'] = current_time( 'mysql' );
 		}
-		$update = $this->wpdb->update(
+		$update = $wpdb->update(
 			$this->object_map_table,
 			$data,
 			array(
@@ -552,7 +557,8 @@ class Object_Sync_Sf_Mapping {
 	 * @return $data Filtered array with only the keys that are in the object map database table. Strips out things from WordPress form if they're present.
 	 */
 	private function setup_object_map_data( $posted = array() ) {
-		$allowed_fields   = $this->wpdb->get_col( "DESC {$this->object_map_table}", 0 );
+		global $wpdb;
+		$allowed_fields   = $wpdb->get_col( "DESC {$this->object_map_table}", 0 );
 		$allowed_fields[] = 'action'; // we use this in both directions even though it isn't in the database; we remove it from the array later if it is present
 
 		$data = array_intersect_key( $posted, array_flip( $allowed_fields ) );
@@ -566,10 +572,11 @@ class Object_Sync_Sf_Mapping {
 	 * @throws \Exception
 	 */
 	public function delete_object_map( $id = '' ) {
+		global $wpdb;
 		$data   = array(
 			'id' => $id,
 		);
-		$delete = $this->wpdb->delete( $this->object_map_table, $data );
+		$delete = $wpdb->delete( $this->object_map_table, $data );
 		if ( 1 === $delete ) {
 			return true;
 		} else {
@@ -621,6 +628,7 @@ class Object_Sync_Sf_Mapping {
 	 *   The most recent fieldmap
 	 */
 	public function load_by_salesforce( $salesforce_id, $reset = false ) {
+		global $wpdb;
 		$conditions = array(
 			'salesforce_id' => $salesforce_id,
 		);
@@ -648,7 +656,7 @@ class Object_Sync_Sf_Mapping {
 			if ( isset( $this->logging ) ) {
 				$logging = $this->logging;
 			} elseif ( class_exists( 'Object_Sync_Sf_Logging' ) ) {
-				$logging = new Object_Sync_Sf_Logging( $this->wpdb, $this->version );
+				$logging = new Object_Sync_Sf_Logging( $this->version );
 			}
 			$logging->setup(
 				sprintf(
@@ -883,10 +891,11 @@ class Object_Sync_Sf_Mapping {
 	 * @return array $errors Associative array of rows that failed to finish from either system
 	 */
 	public function get_failed_object_maps() {
+		global $wpdb;
 		$table       = $this->object_map_table;
 		$errors      = array();
-		$push_errors = $this->wpdb->get_results( 'SELECT * FROM ' . $table . ' WHERE salesforce_id LIKE "tmp_sf_%"', ARRAY_A );
-		$pull_errors = $this->wpdb->get_results( 'SELECT * FROM ' . $table . ' WHERE wordpress_id LIKE "tmp_wp_%"', ARRAY_A );
+		$push_errors = $wpdb->get_results( 'SELECT * FROM ' . $table . ' WHERE salesforce_id LIKE "tmp_sf_%"', ARRAY_A );
+		$pull_errors = $wpdb->get_results( 'SELECT * FROM ' . $table . ' WHERE wordpress_id LIKE "tmp_wp_%"', ARRAY_A );
 		if ( ! empty( $push_errors ) ) {
 			$errors['push_errors'] = $push_errors;
 		}
@@ -904,9 +913,10 @@ class Object_Sync_Sf_Mapping {
 	 * @return array $error Associative array of single row that failed to finish based on id
 	 */
 	public function get_failed_object_map( $id ) {
+		global $wpdb;
 		$table     = $this->object_map_table;
 		$error     = array();
-		$error_row = $this->wpdb->get_row( 'SELECT * FROM ' . $table . ' WHERE id = "' . $id . '"', ARRAY_A );
+		$error_row = $wpdb->get_row( 'SELECT * FROM ' . $table . ' WHERE id = "' . $id . '"', ARRAY_A );
 		if ( ! empty( $error_row ) ) {
 			$error = $error_row;
 		}
