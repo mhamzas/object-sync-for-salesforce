@@ -234,6 +234,7 @@ class Object_Sync_Sf_Salesforce {
 	*   The requested data.
 	*/
 	protected function api_http_request( $path, $params, $method, $options = array(), $type = 'rest' ) {
+		global $wpdb;
 		$options = array_merge( $this->options, $options ); // this will override a value in $this->options with the one in $options if there is a matching key
 		$url     = $this->get_api_endpoint( $type ) . $path;
 		if ( isset( $options['full_url'] ) && true === $options['full_url'] ) {
@@ -289,7 +290,7 @@ class Object_Sync_Sf_Salesforce {
 			if ( isset( $this->logging ) ) {
 				$logging = $this->logging;
 			} elseif ( class_exists( 'Object_Sync_Sf_Logging' ) ) {
-				$logging = new Object_Sync_Sf_Logging( $this->wpdb, $this->version );
+				$logging = new Object_Sync_Sf_Logging( $wpdb, $this->version );
 			}
 
 			// translators: placeholder is the URL of the Salesforce API request
@@ -327,6 +328,7 @@ class Object_Sync_Sf_Salesforce {
 	*   Salesforce response object.
 	*/
 	protected function http_request( $url, $data, $headers = array(), $method = 'GET', $options = array() ) {
+		global $wpdb;
 		// Build the request, including path and headers. Internal use.
 
 		/*
@@ -383,7 +385,7 @@ class Object_Sync_Sf_Salesforce {
 				if ( isset( $this->logging ) ) {
 					$logging = $this->logging;
 				} elseif ( class_exists( 'Object_Sync_Sf_Logging' ) ) {
-					$logging = new Object_Sync_Sf_Logging( $this->wpdb, $this->version );
+					$logging = new Object_Sync_Sf_Logging( $wpdb, $this->version );
 				}
 
 				// translators: placeholder is the URL of the Salesforce API request
@@ -404,7 +406,7 @@ class Object_Sync_Sf_Salesforce {
 				if ( isset( $this->logging ) ) {
 					$logging = $this->logging;
 				} elseif ( class_exists( 'Object_Sync_Sf_Logging' ) ) {
-					$logging = new Object_Sync_Sf_Logging( $this->wpdb, $this->version );
+					$logging = new Object_Sync_Sf_Logging( $wpdb, $this->version );
 				}
 
 				// translators: placeholder is the server code returned by the api
@@ -432,7 +434,7 @@ class Object_Sync_Sf_Salesforce {
 				if ( isset( $this->logging ) ) {
 					$logging = $this->logging;
 				} elseif ( class_exists( 'Object_Sync_Sf_Logging' ) ) {
-					$logging = new Object_Sync_Sf_Logging( $this->wpdb, $this->version );
+					$logging = new Object_Sync_Sf_Logging( $wpdb, $this->version );
 				}
 
 				// translators: placeholder is the server code returned by Salesforce
