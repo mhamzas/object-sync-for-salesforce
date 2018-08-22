@@ -44,6 +44,9 @@ class Object_Sync_Salesforce {
 	*/
 	private $activated;
 
+	/**
+	* @var object
+	*/
 	private $queue;
 
 	/**
