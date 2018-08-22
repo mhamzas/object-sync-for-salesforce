@@ -57,12 +57,23 @@ class Object_Sync_Sf_Queue {
 	 * Add actions
 	 */
 	public function add_actions() {
+		add_filter( 'wp_queue_default_connection', array( $this, 'default_connection' ) );
 		if ( ! class_exists( 'Salesforce_Queue_Job' ) && file_exists( plugin_dir_path( __FILE__ ) . '../vendor/autoload.php' ) ) {
 			require_once plugin_dir_path( __FILE__ ) . '../vendor/autoload.php';
 			require_once plugin_dir_path( __FILE__ ) . '../classes/salesforce_queue_job.php';
 		}
 		wp_queue()->cron( $this->attempts, $this->interval );
 		$this->set_schedule_frequency();
+	}
+
+	/**
+	 * Set default connection
+	 * @param string $connection
+	 * @return string $connection
+	 */
+	function default_connection( $connection ) {
+		$connection = get_option( 'object_sync_for_salesforce_default_connection', 'database' ); // the default for wp-queue is database
+		return $connection;
 	}
 
 	/**

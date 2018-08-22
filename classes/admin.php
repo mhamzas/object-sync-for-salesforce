@@ -23,6 +23,7 @@ class Object_Sync_Sf_Admin {
 	protected $push;
 	protected $pull;
 	protected $schedulable_classes;
+	protected $queue;
 
 	/**
 	* @var string
@@ -78,9 +79,10 @@ class Object_Sync_Sf_Admin {
 	* @param object $pull
 	* @param object $logging
 	* @param array $schedulable_classes
+	* @param object $queue
 	* @throws \Exception
 	*/
-	public function __construct( $version, $login_credentials, $slug, $wordpress, $salesforce, $mappings, $push, $pull, $logging, $schedulable_classes ) {
+	public function __construct( $version, $login_credentials, $slug, $wordpress, $salesforce, $mappings, $push, $pull, $logging, $schedulable_classes, $queue ) {
 		$this->version             = $version;
 		$this->login_credentials   = $login_credentials;
 		$this->slug                = $slug;
@@ -91,6 +93,7 @@ class Object_Sync_Sf_Admin {
 		$this->pull                = $pull;
 		$this->logging             = $logging;
 		$this->schedulable_classes = $schedulable_classes;
+		$this->queue               = $queue;
 
 		$this->sfwp_transients = $this->wordpress->sfwp_transients;
 
@@ -657,6 +660,51 @@ class Object_Sync_Sf_Admin {
 	* @param string $input_callback
 	*/
 	private function fields_scheduling( $page, $section, $callbacks ) {
+
+		add_settings_section( $page, __( 'Scheduling settings', 'object-sync-for-salesforce' ), null, $page );
+		$schedule_settings = array(
+			'default_connection' => array(
+				'title'    => __( 'Default connection', 'object-sync-for-salesforce' ),
+				'callback' => $callbacks['text'],
+				'page'     => $page,
+				'section'  => $section,
+				'args'     => array(
+					'type'     => 'text',
+					'validate' => 'sanitize_validate_text',
+					'desc'     => '',
+					'constant' => 'OBJECT_SYNC_SF_QUEUE_DEFAULT_CONNECTION',
+				),
+
+			),
+		);
+
+		foreach ( $schedule_settings as $key => $attributes ) {
+			$id       = $this->option_prefix . $key;
+			$name     = $this->option_prefix . $key;
+			$title    = $attributes['title'];
+			$callback = $attributes['callback'];
+			$validate = $attributes['args']['validate'];
+			$page     = $attributes['page'];
+			$section  = $attributes['section'];
+			$args     = array_merge(
+				$attributes['args'],
+				array(
+					'title'     => $title,
+					'id'        => $id,
+					'label_for' => $id,
+					'name'      => $name,
+				)
+			);
+
+			// if there is a constant and it is defined, don't run a validate function
+			if ( isset( $attributes['args']['constant'] ) && defined( $attributes['args']['constant'] ) ) {
+				$validate = '';
+			}
+
+			add_settings_field( $id, $title, $callback, $page, $section, $args );
+			register_setting( $page, $id, array( $this, $validate ) );
+		}
+
 		foreach ( $this->schedulable_classes as $key => $value ) {
 			add_settings_section( $key, $value['label'], null, $page );
 			$schedule_settings = array(
