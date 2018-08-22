@@ -233,6 +233,7 @@ class Object_Sync_Sf_Salesforce_Pull {
 							'schedule_name'     => $this->schedule_name,
 							'classes'           => $this->schedulable_classes,
 							'queue'             => $this->queue,
+							'sfwp_transients'   => $this->wordpress->sfwp_transients,
 						);
 
 						// Initialize the queue with the data for this record and save

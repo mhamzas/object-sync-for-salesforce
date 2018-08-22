@@ -79,6 +79,9 @@ class Object_Sync_Sf_Queue {
 	 * Set frequency for schedules
 	 */
 	public function set_schedule_frequency( $schedules = array() ) {
+
+		wp_queue()->cron( $this->attempts, 5 );
+
 		// create an option in the core schedules array for each one the plugin defines
 		/*foreach ( $this->schedulable_classes as $key => $value ) {
 			$schedule_number = absint( get_option( 'object_sync_for_salesforce_' . $key . '_schedule_number', '' ) );
