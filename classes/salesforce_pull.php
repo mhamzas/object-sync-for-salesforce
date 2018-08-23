@@ -14,10 +14,10 @@ if ( ! class_exists( 'Object_Sync_Salesforce' ) ) {
  */
 class Object_Sync_Sf_Salesforce_Pull {
 
+	protected $wpdb;
 	protected $version;
 	protected $login_credentials;
 	protected $slug;
-	protected $wordpress;
 	protected $salesforce;
 	protected $mappings;
 	protected $logging;
@@ -32,6 +32,7 @@ class Object_Sync_Sf_Salesforce_Pull {
 	/**
 	* Constructor which sets up pull schedule
 	*
+	* @param object $wpdb
 	* @param string $version
 	* @param array $login_credentials
 	* @param string $slug
@@ -43,7 +44,8 @@ class Object_Sync_Sf_Salesforce_Pull {
 	* @param object $queue
 	* @throws \Exception
 	*/
-	public function __construct( $version, $login_credentials, $slug, $wordpress, $salesforce, $mappings, $logging, $schedulable_classes, $queue ) {
+	public function __construct( $wpdb, $version, $login_credentials, $slug, $wordpress, $salesforce, $mappings, $logging, $schedulable_classes, $queue ) {
+		$this->wpdb                = $wpdb;
 		$this->version             = $version;
 		$this->login_credentials   = $login_credentials;
 		$this->slug                = $slug;
@@ -55,6 +57,14 @@ class Object_Sync_Sf_Salesforce_Pull {
 		$this->queue               = $queue;
 
 		$this->schedule_name = 'salesforce_pull';
+		$this->schedule      = $this->schedule();
+
+		// load the schedule class
+		// the schedule needs to just run all the time at its configured intervals because WordPress will never trigger it on its own, ie by creating an object
+		$schedule = $this->schedule;
+		// create new schedule based on the options for this current class
+		// this will use the existing schedule if it already exists; otherwise it'll create one
+		$schedule->use_schedule( $this->schedule_name );
 
 		$this->add_actions();
 
@@ -80,6 +90,8 @@ class Object_Sync_Sf_Salesforce_Pull {
 
 		if ( true === $this->salesforce_pull() ) {
 			$code = '200';
+			// check to see if anything is in the queue and handle it if it is
+			$this->schedule->maybe_handle();
 		} else {
 			$code = '403';
 		}
@@ -111,6 +123,20 @@ class Object_Sync_Sf_Salesforce_Pull {
 			// No pull happened.
 			return false;
 		}
+	}
+
+	/**
+	* Load schedule
+	* This loads the schedule class
+	*/
+	private function schedule() {
+		if ( ! class_exists( 'Object_Sync_Sf_Schedule' ) && file_exists( plugin_dir_path( __FILE__ ) . '../vendor/autoload.php' ) ) {
+			require_once plugin_dir_path( __FILE__ ) . '../vendor/autoload.php';
+			require_once plugin_dir_path( __FILE__ ) . '../classes/schedule.php';
+		}
+		$schedule       = new Object_Sync_Sf_Schedule( $this->wpdb, $this->version, $this->login_credentials, $this->slug, $this->wordpress, $this->salesforce, $this->mappings, $this->schedule_name, $this->logging, $this->schedulable_classes );
+		$this->schedule = $schedule;
+		return $schedule;
 	}
 
 	/**
@@ -222,23 +248,9 @@ class Object_Sync_Sf_Salesforce_Pull {
 							continue;
 						}
 
-						$job_processor = array(
-							'version'           => $this->version,
-							'login_credentials' => $this->login_credentials,
-							'slug'              => $this->slug,
-							'wordpress'         => $this->wordpress,
-							'salesforce'        => $this->salesforce,
-							'mappings'          => $this->mappings,
-							'logging'           => $this->logging,
-							'schedule_name'     => $this->schedule_name,
-							'classes'           => $this->schedulable_classes,
-							'queue'             => $this->queue,
-							'sfwp_transients'   => $this->wordpress->sfwp_transients,
-						);
-
 						// Initialize the queue with the data for this record and save
-						$this->queue->save_to_queue( $data, $job_processor );
-
+						$this->schedule->data( array( $data ) );
+						$this->schedule->save()->dispatch();
 						// Update the last pull sync timestamp for this record type to avoid re-processing in case of error
 						$last_sync_pull_trigger = DateTime::createFromFormat( 'Y-m-d\TH:i:s+', $result[ $salesforce_mapping['pull_trigger_field'] ], new DateTimeZone( 'UTC' ) );
 						update_option( 'object_sync_for_salesforce_pull_last_sync_' . $type, $last_sync_pull_trigger->format( 'U' ) );
@@ -280,22 +292,8 @@ class Object_Sync_Sf_Salesforce_Pull {
 								);
 
 								// Initialize the queue with the data for this record and save
-								$job_processor = array(
-									'version'           => $this->version,
-									'login_credentials' => $this->login_credentials,
-									'slug'              => $this->slug,
-									'wordpress'         => $this->wordpress,
-									'salesforce'        => $this->salesforce,
-									'mappings'          => $this->mappings,
-									'logging'           => $this->logging,
-									'schedule_name'     => $this->schedule_name,
-									'classes'           => $this->schedulable_classes,
-									'queue'             => $this->queue,
-								);
-
-								// Initialize the queue with the data for this record and save
-								$this->queue->save_to_queue( $data, $job_processor );
-
+								$this->schedule->data( array( $data ) );
+								$this->schedule->save()->dispatch();
 								// Update the last pull sync timestamp for this record type to avoid re-processing in case of error
 								$last_sync_pull_trigger = DateTime::createFromFormat( 'Y-m-d\TH:i:s+', $result[ $salesforce_mapping['pull_trigger_field'] ], new DateTimeZone( 'UTC' ) );
 								update_option( 'object_sync_for_salesforce_pull_last_sync_' . $type, $last_sync_pull_trigger->format( 'U' ) );
@@ -318,7 +316,7 @@ class Object_Sync_Sf_Salesforce_Pull {
 				if ( isset( $this->logging ) ) {
 					$logging = $this->logging;
 				} elseif ( class_exists( 'Object_Sync_Sf_Logging' ) ) {
-					$logging = new Object_Sync_Sf_Logging( $this->version );
+					$logging = new Object_Sync_Sf_Logging( $this->wpdb, $this->version );
 				}
 
 				$logging->setup(
@@ -510,7 +508,8 @@ class Object_Sync_Sf_Salesforce_Pull {
 						continue;
 					}
 
-					wp_queue()->push( new Salesforce_Queue_Job( $data, 'pull' ) );
+					$this->schedule->push_to_queue( $data );
+					$this->schedule->save()->dispatch();
 
 				}
 
@@ -572,7 +571,7 @@ class Object_Sync_Sf_Salesforce_Pull {
 		$hold_exceptions = count( $salesforce_mappings ) > 1;
 		$exception       = false;
 
-		$seconds = $this->queue->get_schedule_frequency_seconds( $this->schedule_name ) + 60;
+		$seconds = $this->schedule->get_schedule_frequency_seconds( $this->schedule_name ) + 60;
 
 		$transients_to_delete = array();
 
@@ -587,7 +586,7 @@ class Object_Sync_Sf_Salesforce_Pull {
 				if ( isset( $this->logging ) ) {
 					$logging = $this->logging;
 				} elseif ( class_exists( 'Object_Sync_Sf_Logging' ) ) {
-					$logging = new Object_Sync_Sf_Logging( $this->version );
+					$logging = new Object_Sync_Sf_Logging( $this->wpdb, $this->version );
 				}
 
 				$title = sprintf( esc_html__( 'Error: Salesforce Pull: unable to process queue item because it has no Salesforce Id.', 'object-sync-for-salesforce' ) );
@@ -655,7 +654,7 @@ class Object_Sync_Sf_Salesforce_Pull {
 							if ( isset( $this->logging ) ) {
 								$logging = $this->logging;
 							} elseif ( class_exists( 'Object_Sync_Sf_Logging' ) ) {
-								$logging = new Object_Sync_Sf_Logging( $this->version );
+								$logging = new Object_Sync_Sf_Logging( $this->wpdb, $this->version );
 							}
 
 							// translators: placeholders are: 1) what operation is happening, 2) the name of the WordPress object type, 3) the WordPress id field name, 4) the WordPress object id value, 5) the name of the Salesforce object, 6) the Salesforce Id value
@@ -697,7 +696,7 @@ class Object_Sync_Sf_Salesforce_Pull {
 							if ( isset( $this->logging ) ) {
 								$logging = $this->logging;
 							} elseif ( class_exists( 'Object_Sync_Sf_Logging' ) ) {
-								$logging = new Object_Sync_Sf_Logging( $this->version );
+								$logging = new Object_Sync_Sf_Logging( $this->wpdb, $this->version );
 							}
 
 							// translators: placeholders are: 1) what operation is happening, 2) the name of the WordPress object type, 3) the WordPress id field name, 4) the WordPress object id value, 5) the name of the Salesforce object, 6) the Salesforce Id value
@@ -740,7 +739,7 @@ class Object_Sync_Sf_Salesforce_Pull {
 						if ( isset( $this->logging ) ) {
 							$logging = $this->logging;
 						} elseif ( class_exists( 'Object_Sync_Sf_Logging' ) ) {
-							$logging = new Object_Sync_Sf_Logging( $this->version );
+							$logging = new Object_Sync_Sf_Logging( $this->wpdb, $this->version );
 						}
 
 						// translators: placeholders are: 1) what operation is happening, 2) the name of the WordPress object type, 3) the WordPress id field name, 4) the WordPress object id value, 5) the name of the Salesforce object, 6) the Salesforce Id value
@@ -902,7 +901,7 @@ class Object_Sync_Sf_Salesforce_Pull {
 								if ( isset( $this->logging ) ) {
 									$logging = $this->logging;
 								} elseif ( class_exists( 'Object_Sync_Sf_Logging' ) ) {
-									$logging = new Object_Sync_Sf_Logging( $this->version );
+									$logging = new Object_Sync_Sf_Logging( $this->wpdb, $this->version );
 								}
 								$parent = 0;
 								$logging->setup(
@@ -943,7 +942,7 @@ class Object_Sync_Sf_Salesforce_Pull {
 							if ( isset( $this->logging ) ) {
 								$logging = $this->logging;
 							} elseif ( class_exists( 'Object_Sync_Sf_Logging' ) ) {
-								$logging = new Object_Sync_Sf_Logging( $this->version );
+								$logging = new Object_Sync_Sf_Logging( $this->wpdb, $this->version );
 							}
 							// if we know the WordPress object id we can put it in there
 							if ( null !== $wordpress_id ) {
@@ -1015,7 +1014,7 @@ class Object_Sync_Sf_Salesforce_Pull {
 					if ( isset( $this->logging ) ) {
 						$logging = $this->logging;
 					} elseif ( class_exists( 'Object_Sync_Sf_Logging' ) ) {
-						$logging = new Object_Sync_Sf_Logging( $this->version );
+						$logging = new Object_Sync_Sf_Logging( $this->wpdb, $this->version );
 					}
 
 					// if we know the WordPress object id we can put it in there
@@ -1067,7 +1066,7 @@ class Object_Sync_Sf_Salesforce_Pull {
 					if ( isset( $this->logging ) ) {
 						$logging = $this->logging;
 					} elseif ( class_exists( 'Object_Sync_Sf_Logging' ) ) {
-						$logging = new Object_Sync_Sf_Logging( $this->version );
+						$logging = new Object_Sync_Sf_Logging( $this->wpdb, $this->version );
 					}
 
 					// translators: placeholders are: 1) what operation is happening, 2) the name of the WordPress object type, 3) the WordPress id field name, 4) the WordPress object id value, 5) the name of the Salesforce object, 6) the Salesforce Id value
@@ -1103,7 +1102,7 @@ class Object_Sync_Sf_Salesforce_Pull {
 					if ( isset( $this->logging ) ) {
 						$logging = $this->logging;
 					} elseif ( class_exists( 'Object_Sync_Sf_Logging' ) ) {
-						$logging = new Object_Sync_Sf_Logging( $this->version );
+						$logging = new Object_Sync_Sf_Logging( $this->wpdb, $this->version );
 					}
 
 					if ( is_object( $wordpress_id ) ) {
@@ -1170,7 +1169,7 @@ class Object_Sync_Sf_Salesforce_Pull {
 					if ( isset( $this->logging ) ) {
 						$logging = $this->logging;
 					} elseif ( class_exists( 'Object_Sync_Sf_Logging' ) ) {
-						$logging = new Object_Sync_Sf_Logging( $this->version );
+						$logging = new Object_Sync_Sf_Logging( $this->wpdb, $this->version );
 					}
 
 					// translators: placeholders are: 1) what operation is happening, 2) the name of the WordPress object type, 3) the WordPress id field name, 4) the WordPress object id value, 5) the name of the Salesforce object, 6) the Salesforce Id value
@@ -1200,7 +1199,7 @@ class Object_Sync_Sf_Salesforce_Pull {
 					if ( isset( $this->logging ) ) {
 						$logging = $this->logging;
 					} elseif ( class_exists( 'Object_Sync_Sf_Logging' ) ) {
-						$logging = new Object_Sync_Sf_Logging( $this->version );
+						$logging = new Object_Sync_Sf_Logging( $this->wpdb, $this->version );
 					}
 
 					// translators: placeholders are: 1) what operation is happening, 2) the name of the WordPress object, 3) the WordPress id field name, 4) the WordPress object id value, 5) the name of the Salesforce object, 6) the Salesforce Id value

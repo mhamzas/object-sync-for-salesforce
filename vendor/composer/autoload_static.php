@@ -6,42 +6,6 @@ namespace Composer\Autoload;
 
 class ComposerStaticInit258a02242ea9a0000a7e219d56217e81
 {
-    public static $files = array (
-        '0e6d7bf4a5811bfa5cf40c5ccd6fae6a' => __DIR__ . '/..' . '/symfony/polyfill-mbstring/bootstrap.php',
-        'edf8ef411b308ea9e315d190a754d91b' => __DIR__ . '/..' . '/a5hleyrich/wp-queue/src/functions.php',
-    );
-
-    public static $prefixLengthsPsr4 = array (
-        'W' => 
-        array (
-            'WP_Queue\\' => 9,
-        ),
-        'S' => 
-        array (
-            'Symfony\\Polyfill\\Mbstring\\' => 26,
-            'Symfony\\Component\\Translation\\' => 30,
-        ),
-    );
-
-    public static $prefixDirsPsr4 = array (
-        'WP_Queue\\' => 
-        array (
-            0 => __DIR__ . '/..' . '/a5hleyrich/wp-queue/src/WP_Queue',
-        ),
-        'Symfony\\Polyfill\\Mbstring\\' => 
-        array (
-            0 => __DIR__ . '/..' . '/symfony/polyfill-mbstring',
-        ),
-        'Symfony\\Component\\Translation\\' => 
-        array (
-            0 => __DIR__ . '/..' . '/symfony/translation',
-        ),
-    );
-
-    public static $fallbackDirsPsr4 = array (
-        0 => __DIR__ . '/..' . '/nesbot/carbon/src',
-    );
-
     public static $classMap = array (
         'AllowFieldTruncationHeader' => __DIR__ . '/..' . '/developerforce/force.com-toolkit-for-php/soapclient/SforceHeaderOptions.php',
         'AssignmentRuleHeader' => __DIR__ . '/..' . '/developerforce/force.com-toolkit-for-php/soapclient/SforceHeaderOptions.php',
@@ -77,9 +41,6 @@ class ComposerStaticInit258a02242ea9a0000a7e219d56217e81
     public static function getInitializer(ClassLoader $loader)
     {
         return \Closure::bind(function () use ($loader) {
-            $loader->prefixLengthsPsr4 = ComposerStaticInit258a02242ea9a0000a7e219d56217e81::$prefixLengthsPsr4;
-            $loader->prefixDirsPsr4 = ComposerStaticInit258a02242ea9a0000a7e219d56217e81::$prefixDirsPsr4;
-            $loader->fallbackDirsPsr4 = ComposerStaticInit258a02242ea9a0000a7e219d56217e81::$fallbackDirsPsr4;
             $loader->classMap = ComposerStaticInit258a02242ea9a0000a7e219d56217e81::$classMap;
 
         }, null, ClassLoader::class);

@@ -14,10 +14,10 @@ if ( ! class_exists( 'Object_Sync_Salesforce' ) ) {
  */
 class Object_Sync_Sf_Salesforce_Push {
 
+	protected $wpdb;
 	protected $version;
 	protected $login_credentials;
 	protected $slug;
-	protected $wordpress;
 	protected $salesforce;
 	protected $mappings;
 	protected $logging;
@@ -32,6 +32,7 @@ class Object_Sync_Sf_Salesforce_Push {
 	/**
 	* Constructor which sets up push schedule
 	*
+	* @param object $wpdb
 	* @param string $version
 	* @param array $login_credentials
 	* @param string $slug
@@ -43,7 +44,8 @@ class Object_Sync_Sf_Salesforce_Push {
 	* @param object $queue
 	* @throws \Object_Sync_Sf_Exception
 	*/
-	public function __construct( $version, $login_credentials, $slug, $wordpress, $salesforce, $mappings, $logging, $schedulable_classes, $queue ) {
+	public function __construct( $wpdb, $version, $login_credentials, $slug, $wordpress, $salesforce, $mappings, $logging, $schedulable_classes, $queue ) {
+		$this->wpdb                = $wpdb;
 		$this->version             = $version;
 		$this->login_credentials   = $login_credentials;
 		$this->slug                = $slug;
@@ -101,9 +103,10 @@ class Object_Sync_Sf_Salesforce_Push {
 				}
 			}
 		}
-		$attempts = apply_filters( 'ipq_job_attempts', 3 );
-		$interval = apply_filters( 'ipq_cron_interval', 1 );
-		wp_queue()->cron( $attempts, $interval );
+
+		// hook that action-scheduler can call
+		add_action( 'object_sync_for_salesforce_push_record', array( $this, 'salesforce_push_sync_rest' ), 10, 4 );
+
 	}
 
 	/**
@@ -379,7 +382,7 @@ class Object_Sync_Sf_Salesforce_Push {
 			if ( isset( $this->logging ) ) {
 				$logging = $this->logging;
 			} elseif ( class_exists( 'Object_Sync_Sf_Logging' ) ) {
-				$logging = new Object_Sync_Sf_Logging( $this->version );
+				$logging = new Object_Sync_Sf_Logging( $this->wpdb, $this->version );
 			}
 
 			// translators: placeholder is the name of the WordPress id field
@@ -436,33 +439,30 @@ class Object_Sync_Sf_Salesforce_Push {
 					// skip this object if it is a draft and the fieldmap settings told us to ignore it
 					continue;
 				}
+
 				if ( isset( $mapping['push_async'] ) && ( '1' === $mapping['push_async'] ) && false === $manual ) {
 					// this item is async and we want to save it to the queue
-					$data = array(
+
+					// if we determine that the above does not perform well, worst case scenario is we could save $data to a custom table, and pass the id to the callback method.
+					/*$data = array(
 						'object_type'     => $object_type,
 						'object'          => $object,
-						'mapping'         => $mapping,
+						'mapping'         => $mapping['id'],
 						'sf_sync_trigger' => $sf_sync_trigger,
+					);*/
+
+					// add a queue action to push data to salesforce
+					// this means we don't need the frequency for this method anymore, i think
+					$this->queue->add(
+						$this->schedulable_classes[ $this->schedule_name ]['callback'],
+						array(
+							'object_type'     => $object_type,
+							'object'          => filter_var( $object[ $object_id_field ], FILTER_VALIDATE_INT ),
+							'mapping'         => filter_var( $mapping['id'], FILTER_VALIDATE_INT ),
+							'sf_sync_trigger' => $sf_sync_trigger,
+						),
+						'salesforce_push'
 					);
-
-					// Initialize the queue with the data for this record and save
-					$job_processor = array(
-						'version'           => $this->version,
-						'login_credentials' => $this->login_credentials,
-						'slug'              => $this->slug,
-						'wordpress'         => $this->wordpress,
-						'salesforce'        => $this->salesforce,
-						'mappings'          => $this->mappings,
-						'logging'           => $this->logging,
-						'schedule_name'     => $this->schedule_name,
-						'classes'           => $this->schedulable_classes,
-						'queue'             => $this->queue,
-						'sfwp_transients'   => $this->wordpress->sfwp_transients,
-					);
-
-					// Initialize the queue with the data for this record and save
-					$this->queue->save_to_queue( $data, $job_processor );
-
 				} else {
 					// this one is not async. do it immediately.
 					$push = $this->salesforce_push_sync_rest( $object_type, $object, $mapping, $sf_sync_trigger );
@@ -471,15 +471,43 @@ class Object_Sync_Sf_Salesforce_Push {
 		} // End foreach().
 	}
 
+	// temporary
+	public function get_frequency( $name, $unit ) {
+		$schedule_number = get_option( 'object_sync_for_salesforce_' . $name . '_schedule_number', '' );
+		$schedule_unit   = get_option( 'object_sync_for_salesforce_' . $name . '_schedule_unit', '' );
+
+		switch ( $schedule_unit ) {
+			case 'minutes':
+				$seconds = 60;
+				$minutes = 1;
+				break;
+			case 'hours':
+				$seconds = 3600;
+				$minutes = 60;
+				break;
+			case 'days':
+				$seconds = 86400;
+				$minutes = 1440;
+				break;
+			default:
+				$seconds = 0;
+				$minutes = 0;
+		}
+
+		$total = ${$unit} * $schedule_number;
+
+		return $total;
+	}
+
 	/**
 	* Sync WordPress objects and Salesforce objects using the REST API.
 	*
 	* @param string $object_type
 	*   Type of WordPress object.
-	* @param object $object
-	*   The object object.
-	* @param object $mapping
-	*   Salesforce mapping object.
+	* @param array|int $object|$object_id
+	*   The WordPress object data or its ID.
+	* @param array $mapping|$mapping_id
+	*   Salesforce field mapping data array or ID.
 	* @param int $sf_sync_trigger
 	*   Trigger for this sync.
 	*
@@ -487,6 +515,16 @@ class Object_Sync_Sf_Salesforce_Push {
 	*
 	*/
 	public function salesforce_push_sync_rest( $object_type, $object, $mapping, $sf_sync_trigger ) {
+
+		if ( is_int( $object ) ) {
+			$object_id = $object;
+			$object    = $this->wordpress->get_wordpress_object_data( $object_type, $object_id );
+		}
+
+		if ( is_int( $mapping ) ) {
+			$mapping_id = $mapping;
+			$mapping    = $this->mappings->get_fieldmaps( $mapping_id );
+		}
 
 		// If Salesforce is not authorized, don't do anything.
 		// it's unclear to me if we need to do something else here or if this is sufficient. This is all Drupal does.
@@ -533,7 +571,7 @@ class Object_Sync_Sf_Salesforce_Push {
 						if ( isset( $this->logging ) ) {
 							$logging = $this->logging;
 						} elseif ( class_exists( 'Object_Sync_Sf_Logging' ) ) {
-							$logging = new Object_Sync_Sf_Logging( $this->version );
+							$logging = new Object_Sync_Sf_Logging( $this->wpdb, $this->version );
 						}
 
 						// translators: placeholders are: 1) what operation is happening, 2) the name of the Salesforce object, 3) the Salesforce Id value, 4) the name of the WordPress object type, 5) the WordPress id field name, 6) the WordPress object id value
@@ -565,7 +603,7 @@ class Object_Sync_Sf_Salesforce_Push {
 						if ( isset( $this->logging ) ) {
 							$logging = $this->logging;
 						} elseif ( class_exists( 'Object_Sync_Sf_Logging' ) ) {
-							$logging = new Object_Sync_Sf_Logging( $this->version );
+							$logging = new Object_Sync_Sf_Logging( $this->wpdb, $this->version );
 						}
 
 						// translators: placeholders are: 1) what operation is happening, 2) the name of the Salesforce object, 3) the Salesforce Id value, 4) the name of the WordPress object type, 5) the WordPress id field name, 6) the WordPress object id value
@@ -608,7 +646,7 @@ class Object_Sync_Sf_Salesforce_Push {
 					if ( isset( $this->logging ) ) {
 						$logging = $this->logging;
 					} elseif ( class_exists( 'Object_Sync_Sf_Logging' ) ) {
-						$logging = new Object_Sync_Sf_Logging( $this->version );
+						$logging = new Object_Sync_Sf_Logging( $this->wpdb, $this->version );
 					}
 
 					// translators: placeholders are: 1) what operation is happening, 2) the name of the Salesforce object, 3) the Salesforce Id value, 4) the name of the WordPress object type, 5) the WordPress id field name, 6) the WordPress object id value
@@ -675,7 +713,7 @@ class Object_Sync_Sf_Salesforce_Push {
 			unset( $params['key'] );
 		}
 
-		$seconds = $this->queue->get_schedule_frequency_seconds( $this->schedule_name ) + 60;
+		$seconds = $this->get_frequency( $this->schedule_name, 'seconds' ) + 60;
 
 		if ( true === $is_new ) {
 
@@ -779,7 +817,7 @@ class Object_Sync_Sf_Salesforce_Push {
 				if ( isset( $this->logging ) ) {
 					$logging = $this->logging;
 				} elseif ( class_exists( 'Object_Sync_Sf_Logging' ) ) {
-					$logging = new Object_Sync_Sf_Logging( $this->version );
+					$logging = new Object_Sync_Sf_Logging( $this->wpdb, $this->version );
 				}
 
 				// translators: placeholders are: 1) what operation is happening, 2) the name of the Salesforce object, 3) the Salesforce Id value if there is one, 4) the name of the WordPress object type, 5) the WordPress id field name, 6) the WordPress object id value
@@ -822,7 +860,7 @@ class Object_Sync_Sf_Salesforce_Push {
 				if ( isset( $this->logging ) ) {
 					$logging = $this->logging;
 				} elseif ( class_exists( 'Object_Sync_Sf_Logging' ) ) {
-					$logging = new Object_Sync_Sf_Logging( $this->version );
+					$logging = new Object_Sync_Sf_Logging( $this->wpdb, $this->version );
 				}
 
 				// translators: placeholders are: 1) what operation is happening, 2) the name of the Salesforce object, 3) the Salesforce Id value, 4) the name of the WordPress object type, 5) the WordPress id field name, 6) the WordPress object id value
@@ -859,7 +897,7 @@ class Object_Sync_Sf_Salesforce_Push {
 				if ( isset( $this->logging ) ) {
 					$logging = $this->logging;
 				} elseif ( class_exists( 'Object_Sync_Sf_Logging' ) ) {
-					$logging = new Object_Sync_Sf_Logging( $this->version );
+					$logging = new Object_Sync_Sf_Logging( $this->wpdb, $this->version );
 				}
 
 				// translators: placeholders are: 1) error code the Salesforce API returned, 2) what operation is happening, 3) the name of the WordPress object type, 4) the WordPress id field name, 5) the WordPress object id value
@@ -906,7 +944,7 @@ class Object_Sync_Sf_Salesforce_Push {
 				if ( isset( $this->logging ) ) {
 					$logging = $this->logging;
 				} elseif ( class_exists( 'Object_Sync_Sf_Logging' ) ) {
-					$logging = new Object_Sync_Sf_Logging( $this->version );
+					$logging = new Object_Sync_Sf_Logging( $this->wpdb, $this->version );
 				}
 
 				// translators: placeholders are: 1) what operation is happening, 2) the name of the WordPress object type, 3) the WordPress id field name, 4) the WordPress object id value, 5) the Salesforce Id value
@@ -956,7 +994,7 @@ class Object_Sync_Sf_Salesforce_Push {
 				if ( isset( $this->logging ) ) {
 					$logging = $this->logging;
 				} elseif ( class_exists( 'Object_Sync_Sf_Logging' ) ) {
-					$logging = new Object_Sync_Sf_Logging( $this->version );
+					$logging = new Object_Sync_Sf_Logging( $this->wpdb, $this->version );
 				}
 
 				// translators: placeholders are: 1) what operation is happening, 2) the name of the Salesforce object, 3) the Salesforce Id value, 4) the name of the WordPress object type, 5) the WordPress id field name, 6) the WordPress object id value
@@ -986,7 +1024,7 @@ class Object_Sync_Sf_Salesforce_Push {
 				if ( isset( $this->logging ) ) {
 					$logging = $this->logging;
 				} elseif ( class_exists( 'Object_Sync_Sf_Logging' ) ) {
-					$logging = new Object_Sync_Sf_Logging( $this->version );
+					$logging = new Object_Sync_Sf_Logging( $this->wpdb, $this->version );
 				}
 
 				// translators: placeholders are: 1) what operation is happening, 2) the name of the Salesforce object, 3) the Salesforce Id value, 4) the name of the WordPress object type, 5) the WordPress id field name, 6) the WordPress object id value
