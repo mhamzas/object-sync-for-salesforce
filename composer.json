@@ -20,13 +20,19 @@
             "type": "git"
         }
     ],
+    "autoload": {
+      "files": ["vendor/prospress/action-scheduler/action-scheduler.php"],
+      "psr-4": {
+        "Object_Sync_Salesforce\\" : "src/"
+      },
+      "classmap": ["vendor/pippinsplugins/wp-logging/"]
+    },
     "require": {
+        "php": ">=5.5",
+        "composer/installers": "~1.0",
         "pippinsplugins/wp-logging": "dev-master",
         "developerforce/force.com-toolkit-for-php": "^1.0@dev",
         "prospress/action-scheduler": "dev-master"
-    },
-    "autoload": {
-        "classmap": ["vendor/pippinsplugins/wp-logging/"]
     },
     "require-dev": {
         "apigen/apigen": "^4.1",

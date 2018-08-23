@@ -6,6 +6,32 @@ namespace Composer\Autoload;
 
 class ComposerStaticInit258a02242ea9a0000a7e219d56217e81
 {
+    public static $files = array (
+        '712263cd6b22ec9ea795d59ae1ebda80' => __DIR__ . '/..' . '/prospress/action-scheduler/action-scheduler.php',
+    );
+
+    public static $prefixLengthsPsr4 = array (
+        'O' => 
+        array (
+            'Object_Sync_Salesforce\\' => 23,
+        ),
+        'C' => 
+        array (
+            'Composer\\Installers\\' => 20,
+        ),
+    );
+
+    public static $prefixDirsPsr4 = array (
+        'Object_Sync_Salesforce\\' => 
+        array (
+            0 => __DIR__ . '/../..' . '/src',
+        ),
+        'Composer\\Installers\\' => 
+        array (
+            0 => __DIR__ . '/..' . '/composer/installers/src/Composer/Installers',
+        ),
+    );
+
     public static $classMap = array (
         'AllowFieldTruncationHeader' => __DIR__ . '/..' . '/developerforce/force.com-toolkit-for-php/soapclient/SforceHeaderOptions.php',
         'AssignmentRuleHeader' => __DIR__ . '/..' . '/developerforce/force.com-toolkit-for-php/soapclient/SforceHeaderOptions.php',
@@ -41,6 +67,8 @@ class ComposerStaticInit258a02242ea9a0000a7e219d56217e81
     public static function getInitializer(ClassLoader $loader)
     {
         return \Closure::bind(function () use ($loader) {
+            $loader->prefixLengthsPsr4 = ComposerStaticInit258a02242ea9a0000a7e219d56217e81::$prefixLengthsPsr4;
+            $loader->prefixDirsPsr4 = ComposerStaticInit258a02242ea9a0000a7e219d56217e81::$prefixDirsPsr4;
             $loader->classMap = ComposerStaticInit258a02242ea9a0000a7e219d56217e81::$classMap;
 
         }, null, ClassLoader::class);

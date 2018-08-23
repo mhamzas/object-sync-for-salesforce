@@ -17,8 +17,8 @@ class Object_Sync_Sf_Admin {
 	protected $version;
 	protected $login_credentials;
 	protected $slug;
-	protected $salesforce;
 	protected $wordpress;
+	protected $salesforce;
 	protected $mappings;
 	protected $push;
 	protected $pull;
